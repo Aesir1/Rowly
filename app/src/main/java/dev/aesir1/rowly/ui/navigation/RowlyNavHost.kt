@@ -24,12 +24,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -93,6 +95,16 @@ fun RowlyApp(navController: NavHostController = rememberNavController()) {
     // mis-tap while rowing - so every route out is closed until the hold-to-pause completes.
     val locked = recording.isLive
     BackHandler(enabled = locked) { }
+
+    // Keep the display awake for the duration of a live session - a rower glances at the numbers,
+    // they cannot be behind a lock screen. FLAG_KEEP_SCREEN_ON rather than a wake lock precisely
+    // because it only defers the idle timeout: pressing power still locks the phone, and pausing
+    // hands the timeout straight back.
+    val view = LocalView.current
+    DisposableEffect(locked) {
+        view.keepScreenOn = locked
+        onDispose { view.keepScreenOn = false }
+    }
 
     val select: (String) -> Unit = { route ->
         navController.navigate(route) {
