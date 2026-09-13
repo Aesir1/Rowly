@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sampled from the circle fill inside Logo_minimalistic, so the adaptive background and
+         the artwork read as one shape under any launcher mask. -->
+    <color name="ic_launcher_background">#F1F0EC</color>
+    <!-- Sampled from the border pixels of Logo_Slogan: the artwork is a cream field with a
+         vignette, so matching its edge exactly means no visible seam around the splash image. -->
+    <color name="splash_background">#ECEAE1</color>
+</resources>

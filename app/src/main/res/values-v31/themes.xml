@@ -1,0 +1,12 @@
+<resources>
+    <!--
+      Android 12+ draws its own splash before the activity and ignores windowBackground for it.
+      Theming it with the same cream and the round Rowly mark makes the launch read as one
+      continuous sequence: system splash -> the full logo and slogan -> the app.
+    -->
+    <style name="Theme.Rowly" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+    </style>
+</resources>

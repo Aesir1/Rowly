@@ -1,5 +1,10 @@
-bin/
-obj/
-/packages/
-riderModule.iml
-/_ReSharper.Caches/
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx

@@ -1,0 +1,7 @@
+<resources>
+    <!-- windowBackground is the cream of the splash artwork, so the window that exists before
+         Compose draws its first frame is already the brand colour rather than a white flash. -->
+    <style name="Theme.Rowly" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+    </style>
+</resources>

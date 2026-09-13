@@ -1,0 +1,49 @@
+<resources>
+    <string name="app_name">Rowly</string>
+
+    <string name="tab_record">Record</string>
+    <string name="tab_training">Training</string>
+    <string name="tab_activities">Activities</string>
+
+    <string name="stroke_rate">Stroke Rate</string>
+    <string name="time">Time</string>
+    <string name="distance">Distance</string>
+    <string name="speed">Speed</string>
+    <string name="spm">SPM</string>
+    <string name="unit_km">KM</string>
+    <string name="unit_kmh">KM/H</string>
+
+    <string name="no_stroke_data">No data could be read</string>
+    <string name="gps_signal_unavailable">GPS signal unavailable</string>
+
+    <string name="start">Start</string>
+    <string name="hold_to_pause">Hold to pause</string>
+    <string name="paused">Paused</string>
+    <string name="continue_recording">Continue</string>
+    <string name="finish">Finish</string>
+
+    <string name="location_required_title">Location access is required</string>
+    <string name="location_required_body">Rowly records your route, distance and speed from GPS. Without location access it cannot track a session.</string>
+    <string name="location_disabled_body">Location services are switched off. Turn them on so Rowly can record your route, distance and speed.</string>
+    <string name="grant_location">Grant location access</string>
+    <string name="open_settings">Open app settings</string>
+    <string name="open_location_settings">Open location settings</string>
+
+    <string name="recording_channel_name">Recording</string>
+    <string name="recording_channel_description">Shown while a rowing session is being recorded</string>
+    <string name="recording_active">Rowly is recording</string>
+    <string name="recording_paused">Rowly is paused</string>
+
+    <string name="training_placeholder_title">Training</string>
+    <string name="training_placeholder_body">Structured training sessions are coming later.</string>
+
+    <string name="no_activities">No recorded activities yet.</string>
+    <string name="activity_title">Activity</string>
+    <string name="duration">Duration</string>
+    <string name="avg_speed">Avg. Speed</string>
+    <string name="max_speed">Max. Speed</string>
+    <string name="avg_spm">Avg. SPM</string>
+    <string name="no_route">This activity has no recorded route.</string>
+    <string name="speed_over_distance">Speed over distance</string>
+    <string name="back">Back</string>
+</resources>
