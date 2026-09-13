@@ -3,7 +3,10 @@ package dev.aesir1.rowly.data.database
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Upsert
 import dev.aesir1.rowly.data.entity.ActivityEntity
+import dev.aesir1.rowly.data.entity.CalibrationSampleEntity
+import dev.aesir1.rowly.data.entity.UserSettingsEntity
 import dev.aesir1.rowly.data.entity.LocationPointEntity
 import dev.aesir1.rowly.data.entity.StrokeRateSampleEntity
 import kotlinx.coroutines.flow.Flow
@@ -53,4 +56,21 @@ interface StrokeRateDao {
 
     @Query("SELECT * FROM stroke_rate_samples WHERE activityId = :activityId ORDER BY timestamp ASC")
     suspend fun getForActivity(activityId: Long): List<StrokeRateSampleEntity>
+}
+
+/** Settings and calibration history. No repository wrapper - it would forward and nothing else. */
+@Dao
+interface SettingsDao {
+    /** Null until the first save; callers fall back to the entity's own defaults. */
+    @Query("SELECT * FROM user_settings WHERE id = 1")
+    fun observeSettings(): Flow<UserSettingsEntity?>
+
+    @Upsert
+    suspend fun saveSettings(settings: UserSettingsEntity)
+
+    @Insert
+    suspend fun insertCalibration(sample: CalibrationSampleEntity)
+
+    @Query("SELECT * FROM calibration_samples ORDER BY createdAt DESC")
+    fun observeCalibrations(): Flow<List<CalibrationSampleEntity>>
 }

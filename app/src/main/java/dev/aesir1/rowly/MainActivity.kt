@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
                     if (!splashDone) {
                         // Start counting from the frame the splash is actually drawn on, not from
                         // composition. On a slow first frame those are most of a second apart, and
-                        // the requirement is 1.5 s of visibility, not 1.5 s of clock.
+                        // the requirement is 2 s of visibility, not 2 s of clock.
                         withFrameNanos { }
                         delay(SPLASH_MILLIS)
                         splashDone = true

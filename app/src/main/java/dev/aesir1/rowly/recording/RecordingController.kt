@@ -2,6 +2,7 @@ package dev.aesir1.rowly.recording
 
 import dev.aesir1.rowly.data.entity.LocationPointEntity
 import dev.aesir1.rowly.data.entity.StrokeRateSampleEntity
+import dev.aesir1.rowly.data.entity.UserSettingsEntity
 import dev.aesir1.rowly.data.repository.ActivityRepository
 import dev.aesir1.rowly.location.Fix
 import dev.aesir1.rowly.location.TrackAccumulator
@@ -36,8 +37,15 @@ class RecordingController(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
 
-    private val detector = StrokeRateDetector()
+    private var detector = StrokeRateDetector()
     private val track = TrackAccumulator()
+
+    /**
+     * Calibrated motion floor, fed from the settings row. Only read when a session starts: the
+     * accelerometer collector holds the detector instance for the life of the session, so
+     * swapping it mid-piece would leave the sensor writing into an orphan.
+     */
+    var strokeSensitivity: Double = UserSettingsEntity.DEFAULT_SENSITIVITY
 
     private val _state = MutableStateFlow(RecordingUiState())
     val state: StateFlow<RecordingUiState> = _state.asStateFlow()
@@ -62,7 +70,12 @@ class RecordingController(
         val phase = _state.value.phase
         if (phase == RecordingPhase.Recording || phase == RecordingPhase.PauseConfirmation) return
 
-        detector.reset()
+        detector = StrokeRateDetector(
+            StrokeRateDetector.Config(
+                minRmsMs2 = strokeSensitivity,
+                fullRmsMs2 = strokeSensitivity * UserSettingsEntity.FULL_RMS_RATIO,
+            ),
+        )
         track.reset()
         pendingPoints.clear()
         pendingStrokes.clear()

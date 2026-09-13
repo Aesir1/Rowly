@@ -4,6 +4,7 @@
     <string name="tab_record">Record</string>
     <string name="tab_training">Training</string>
     <string name="tab_activities">Activities</string>
+    <string name="tab_settings">Settings</string>
 
     <string name="stroke_rate">Stroke Rate</string>
     <string name="time">Time</string>
@@ -46,4 +47,31 @@
     <string name="no_route">This activity has no recorded route.</string>
     <string name="speed_over_distance">Speed over distance</string>
     <string name="back">Back</string>
+
+    <string name="settings_user">User</string>
+    <string name="settings_user_body">Profile and personal details</string>
+    <string name="settings_user_placeholder">Nothing here yet.</string>
+    <string name="settings_calibration">Calibration</string>
+    <string name="settings_calibration_body">Check the phone\'s stroke rate against an ergometer</string>
+
+    <string name="calibration_intro">Put the phone where you row with it, set the ergometer going, and run one minute. Then type in the rate the ergometer showed.</string>
+    <string name="calibration_start">Start 1-minute test</string>
+    <string name="calibration_cancel">Cancel test</string>
+    <string name="calibration_idle">Ready</string>
+    <string name="calibration_remaining">%1$d s remaining</string>
+    <string name="calibration_no_sensor">This phone has no accelerometer.</string>
+    <string name="calibration_sensitivity">Stroke sensitivity</string>
+    <string name="calibration_sensitivity_body">The motion floor below which the phone treats movement as no rowing at all. Applies to the next recorded session.</string>
+    <string name="calibration_more_sensitive">More sensitive</string>
+    <string name="calibration_less_sensitive">Less sensitive</string>
+    <string name="calibration_phone_data">Phone data</string>
+    <string name="calibration_history">Past calibrations</string>
+    <string name="calibration_history_line">Phone %1$s SPM vs. ergometer %2$s SPM</string>
+    <string name="calibration_history_detail">Difference %1$s SPM - %2$d readings - sensitivity %3$s</string>
+    <string name="calibration_result_title">Test finished</string>
+    <string name="calibration_result_measured">The phone measured %1$s SPM over %2$d readings.</string>
+    <string name="calibration_result_delta">Difference: %1$s SPM</string>
+    <string name="calibration_ergometer_spm">Ergometer SPM</string>
+    <string name="calibration_save">Save</string>
+    <string name="calibration_discard">Discard</string>
 </resources>

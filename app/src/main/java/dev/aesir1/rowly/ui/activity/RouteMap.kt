@@ -49,12 +49,16 @@ fun RouteMap(
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
             setUseDataConnection(true)
-            // The zoom buttons sit on top of the route and the map already pinch-zooms.
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.ALWAYS)
         }
     }
 
     DisposableEffect(lifecycleOwner) {
+        // osmdroid starts its tile-request threads in onResume, and a LifecycleEventObserver
+        // registered on an already-RESUMED owner never replays that event. Opening this screen
+        // from a running app therefore left the downloader stopped and the map blank until a
+        // touch forced a reload - hence the explicit call before the observer is attached.
+        mapView.onResume()
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> mapView.onResume()
@@ -65,6 +69,7 @@ fun RouteMap(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.onPause()
             mapView.onDetach()
         }
     }

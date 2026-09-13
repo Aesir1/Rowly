@@ -14,7 +14,7 @@ import androidx.compose.ui.res.stringResource
 import dev.aesir1.rowly.R
 
 /** How long the branded launch image stays on screen. */
-const val SPLASH_MILLIS = 1500L
+const val SPLASH_MILLIS = 2000L
 
 /**
  * The launch image.
