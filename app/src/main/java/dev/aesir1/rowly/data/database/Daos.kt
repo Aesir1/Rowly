@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Upsert
 import dev.aesir1.rowly.data.entity.ActivityEntity
+import dev.aesir1.rowly.data.entity.ActivityRank
 import dev.aesir1.rowly.data.entity.CalibrationSampleEntity
 import dev.aesir1.rowly.data.entity.UserSettingsEntity
 import dev.aesir1.rowly.data.entity.LocationPointEntity
@@ -36,6 +37,9 @@ interface ActivityDao {
         averageSpm: Double?,
     )
 
+    @Query("UPDATE activities SET rank = :rank WHERE id = :id")
+    suspend fun updateRank(id: Long, rank: ActivityRank?)
+
     @Query("DELETE FROM activities WHERE id = :id")
     suspend fun delete(id: Long)
 }
@@ -64,6 +68,11 @@ interface SettingsDao {
     /** Null until the first save; callers fall back to the entity's own defaults. */
     @Query("SELECT * FROM user_settings WHERE id = 1")
     fun observeSettings(): Flow<UserSettingsEntity?>
+
+    /** One-shot read for the read-modify-write every writer needs: [saveSettings] replaces the
+     * whole row, so a caller that builds a fresh entity would wipe the columns it does not own. */
+    @Query("SELECT * FROM user_settings WHERE id = 1")
+    suspend fun settings(): UserSettingsEntity?
 
     @Upsert
     suspend fun saveSettings(settings: UserSettingsEntity)

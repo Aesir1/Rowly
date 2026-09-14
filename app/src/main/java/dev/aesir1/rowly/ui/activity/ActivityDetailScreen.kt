@@ -26,6 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -117,7 +120,11 @@ fun ActivityDetailScreen(
         ) {
             // Every stored point is drawn, including the ones excluded from the distance figure:
             // the route is what actually happened, the numbers are what can be trusted.
-            val geoPoints = loaded.points.map { GeoPoint(it.latitude, it.longitude) }
+            val geoPoints = remember(loaded.points) {
+                loaded.points.map { GeoPoint(it.latitude, it.longitude) }
+            }
+            // Where the chart is being scrubbed, shown on the map so the two read together.
+            var cursor by remember { mutableStateOf<GeoPoint?>(null) }
             if (geoPoints.isEmpty()) {
                 Box(
                     Modifier.fillMaxWidth().height(120.dp),
@@ -127,6 +134,7 @@ fun ActivityDetailScreen(
                 RouteMap(
                     points = geoPoints,
                     modifier = Modifier.fillMaxWidth().height(280.dp),
+                    cursor = cursor,
                 )
             }
 
@@ -137,7 +145,12 @@ fun ActivityDetailScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(Modifier.height(8.dp))
-                    SpeedChart(loaded.speedSeries)
+                    SpeedChart(
+                        samples = loaded.speedSeries,
+                        onSelect = { sample ->
+                            cursor = sample?.let { GeoPoint(it.latitude, it.longitude) }
+                        },
+                    )
                 }
             }
 

@@ -4,6 +4,7 @@ import dev.aesir1.rowly.data.database.ActivityDao
 import dev.aesir1.rowly.data.database.LocationPointDao
 import dev.aesir1.rowly.data.database.StrokeRateDao
 import dev.aesir1.rowly.data.entity.ActivityEntity
+import dev.aesir1.rowly.data.entity.ActivityRank
 import dev.aesir1.rowly.data.entity.LocationPointEntity
 import dev.aesir1.rowly.data.entity.StrokeRateSampleEntity
 import kotlinx.coroutines.flow.Flow
@@ -57,6 +58,9 @@ class ActivityRepository(
 
     suspend fun strokeSamples(activityId: Long): List<StrokeRateSampleEntity> =
         strokeRateDao.getForActivity(activityId)
+
+    suspend fun setRank(activityId: Long, rank: ActivityRank?) =
+        activityDao.updateRank(activityId, rank)
 
     suspend fun delete(activityId: Long) = activityDao.delete(activityId)
 }
