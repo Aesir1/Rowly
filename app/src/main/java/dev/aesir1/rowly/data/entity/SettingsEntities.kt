@@ -20,6 +20,13 @@ data class UserSettingsEntity(
     val sensorResolution: Float = 0f,
     val sensorMaxRange: Float = 0f,
     val updatedAt: Long = 0,
+    val firstName: String = "",
+    val lastName: String = "",
+    val nickname: String = "",
+    /** BCP-47 tag, or empty for "follow the system". Empty rather than a default locale so
+     * a phone that changes language still carries the app with it. */
+    val languageTag: String = "",
+    val units: UnitSystem = UnitSystem.METRIC,
 ) {
     companion object {
         const val SINGLETON_ID = 1
@@ -31,8 +38,17 @@ data class UserSettingsEntity(
          * the floor above it and every reading would score zero amplitude confidence.
          */
         const val FULL_RMS_RATIO = 3.125
+
+        /**
+         * The BCP-47 tags the app actually ships strings for, empty first for the system
+         * default. Add a tag here the same day a `values-xx/` directory lands - offering a
+         * language with no translations just shows English under a foreign name.
+         */
+        val LANGUAGE_TAGS = listOf("", "en")
     }
 }
+
+enum class UnitSystem { METRIC, IMPERIAL }
 
 /**
  * One minute of phone-measured stroke rate next to what the ergometer's own display showed.
