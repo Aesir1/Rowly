@@ -1,7 +1,10 @@
 package dev.aesir1.rowly
 
 import android.app.Application
+import android.app.LocaleManager
 import android.content.Context
+import android.os.Build
+import android.os.LocaleList
 import dev.aesir1.rowly.data.database.RowlyDatabase
 import dev.aesir1.rowly.data.database.SettingsDao
 import dev.aesir1.rowly.data.repository.ActivityRepository
@@ -44,7 +47,22 @@ class RowlyApplication : Application() {
         scope.launch {
             container.settingsDao.observeSettings().filterNotNull().collect {
                 container.recordingController.strokeSensitivity = it.strokeSensitivity
+                applyLanguage(it.languageTag)
             }
         }
+    }
+
+    /**
+     * Per-app language, empty tag meaning "follow the system".
+     *
+     * ponytail: platform API only, so it is a no-op below API 33. Doing it on 29-32 needs
+     * AppCompat's own context wrapper and an activity recreate - add appcompat if a user on
+     * Android 10-12 ever needs a language other than their phone's.
+     */
+    private fun applyLanguage(tag: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val manager = getSystemService(LocaleManager::class.java) ?: return
+        val wanted = LocaleList.forLanguageTags(tag)
+        if (manager.applicationLocales != wanted) manager.applicationLocales = wanted
     }
 }

@@ -30,21 +30,23 @@ import dev.aesir1.rowly.R
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Milliseconds the pause button must be held. Deliberately long - see [HoldToPauseButton]. */
-const val PAUSE_HOLD_MILLIS = 3000
+/** Milliseconds the button must be held. Deliberately long - see [HoldButton]. */
+const val HOLD_MILLIS = 3000
 
 /**
- * Pause requires a continuous three-second hold, with a ring that fills as it progresses.
+ * An action that requires a continuous three-second hold, with a ring that fills as it progresses.
  *
- * The friction is the point: a brief tap while rowing must never interrupt a session, and the
- * filling ring tells the user both that the press registered and how much longer to hold.
+ * The friction is the point: a brief tap while rowing must never interrupt a session or a
+ * calibration run, and the filling ring tells the user both that the press registered and how
+ * much longer to hold.
  */
 @Composable
-fun HoldToPauseButton(
-    onHoldStart: () -> Unit,
-    onHoldCancel: () -> Unit,
+fun HoldButton(
     onHoldComplete: () -> Unit,
     modifier: Modifier = Modifier,
+    label: String = stringResource(R.string.hold_to_pause),
+    onHoldStart: () -> Unit = {},
+    onHoldCancel: () -> Unit = {},
 ) {
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -89,12 +91,12 @@ fun HoldToPauseButton(
                         val animation = scope.launch {
                             progress.animateTo(
                                 targetValue = 1f,
-                                animationSpec = tween(PAUSE_HOLD_MILLIS, easing = LinearEasing),
+                                animationSpec = tween(HOLD_MILLIS, easing = LinearEasing),
                             )
                         }
                         // A null result means the timeout won the race: the finger was still down
                         // for the full three seconds, so the hold completed.
-                        val released = withTimeoutOrNull(PAUSE_HOLD_MILLIS.toLong()) {
+                        val released = withTimeoutOrNull(HOLD_MILLIS.toLong()) {
                             tryAwaitRelease()
                         }
                         animation.cancel()
@@ -110,7 +112,7 @@ fun HoldToPauseButton(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = stringResource(R.string.hold_to_pause),
+            text = label,
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
         )

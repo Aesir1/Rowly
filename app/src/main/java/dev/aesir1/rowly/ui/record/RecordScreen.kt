@@ -162,7 +162,7 @@ fun RecordScreen(
             }
 
             RecordingPhase.Recording, RecordingPhase.PauseConfirmation -> {
-                HoldToPauseButton(
+                HoldButton(
                     onHoldStart = viewModel::pauseHoldStarted,
                     onHoldCancel = viewModel::pauseHoldCancelled,
                     onHoldComplete = viewModel::pause,

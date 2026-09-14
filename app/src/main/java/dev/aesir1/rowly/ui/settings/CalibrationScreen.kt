@@ -15,12 +15,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.aesir1.rowly.R
 import dev.aesir1.rowly.data.entity.CalibrationSampleEntity
 import dev.aesir1.rowly.ui.activities.formatDate
+import dev.aesir1.rowly.ui.record.HoldButton
 import dev.aesir1.rowly.ui.theme.RowlyText
 import java.util.Locale
 import kotlin.math.abs
@@ -51,8 +52,17 @@ private const val MAX_SENSITIVITY = 0.30f
  * side by side so a drift of a few SPM is visible rather than assumed away.
  */
 @Composable
-fun CalibrationScreen(viewModel: CalibrationViewModel = viewModel()) {
+fun CalibrationScreen(
+    /** Lets the host lock navigation and keep the screen on for the length of a run. */
+    onRunningChange: (Boolean) -> Unit = {},
+    viewModel: CalibrationViewModel = viewModel(),
+) {
     val state by viewModel.state.collectAsState()
+
+    DisposableEffect(state.running) {
+        onRunningChange(state.running)
+        onDispose { onRunningChange(false) }
+    }
 
     Column(
         Modifier
@@ -92,10 +102,12 @@ fun CalibrationScreen(viewModel: CalibrationViewModel = viewModel()) {
                 textAlign = TextAlign.Center,
             )
         } else if (state.running) {
-            OutlinedButton(
-                onClick = viewModel::cancel,
-                modifier = Modifier.fillMaxWidth().height(64.dp),
-            ) { Text(stringResource(R.string.calibration_cancel)) }
+            // Same friction as pausing a session: the run is a minute long and a stray tap
+            // while the phone sits on the ergometer must not throw it away.
+            HoldButton(
+                onHoldComplete = viewModel::cancel,
+                label = stringResource(R.string.calibration_cancel),
+            )
         } else {
             Button(
                 onClick = viewModel::start,

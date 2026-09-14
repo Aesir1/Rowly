@@ -20,7 +20,7 @@ import dev.aesir1.rowly.data.entity.UserSettingsEntity
         UserSettingsEntity::class,
         CalibrationSampleEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class RowlyDatabase : RoomDatabase() {
@@ -54,9 +54,24 @@ abstract class RowlyDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Activity ranks and the user profile. All additive, so plain ADD COLUMNs - the
+         * recorded sessions are untouched and must stay that way.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `activities` ADD COLUMN `rank` TEXT")
+                db.execSQL("ALTER TABLE `user_settings` ADD COLUMN `firstName` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `user_settings` ADD COLUMN `lastName` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `user_settings` ADD COLUMN `nickname` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `user_settings` ADD COLUMN `languageTag` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `user_settings` ADD COLUMN `units` TEXT NOT NULL DEFAULT 'METRIC'")
+            }
+        }
+
         fun create(context: Context): RowlyDatabase =
             Room.databaseBuilder(context, RowlyDatabase::class.java, "rowly.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

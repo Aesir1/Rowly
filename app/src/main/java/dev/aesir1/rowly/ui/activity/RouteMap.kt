@@ -22,10 +22,12 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val START_COLOR = 0xFF2E9E4F.toInt()
 private const val END_COLOR = 0xFFD64545.toInt()
 private const val ROUTE_COLOR = 0xFF1B6C8C.toInt()
+private const val CURSOR_COLOR = 0xFFF2A007.toInt()
 
 /**
  * The recorded route on an OpenStreetMap base layer, with a green start marker and a red end
@@ -39,6 +41,8 @@ private const val ROUTE_COLOR = 0xFF1B6C8C.toInt()
 fun RouteMap(
     points: List<GeoPoint>,
     modifier: Modifier = Modifier,
+    /** Where the chart is being scrubbed, or null when nothing is selected. */
+    cursor: GeoPoint? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -52,6 +56,11 @@ fun RouteMap(
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.ALWAYS)
         }
     }
+
+    val cursorMarker = remember { marker(mapView, GeoPoint(0.0, 0.0), CURSOR_COLOR) }
+    // The route is drawn once. Rebuilding a few thousand polyline points on every scrub of the
+    // chart would stutter, and re-fitting the bounding box would undo the user's own pan and zoom.
+    val drawn = remember(points) { AtomicBoolean(false) }
 
     DisposableEffect(lifecycleOwner) {
         // osmdroid starts its tile-request threads in onResume, and a LifecycleEventObserver
@@ -80,8 +89,8 @@ fun RouteMap(
         modifier = modifier.clipToBounds(),
         factory = { mapView },
         update = { map ->
-            map.overlays.clear()
-            if (points.isNotEmpty()) {
+            if (points.isNotEmpty() && drawn.compareAndSet(false, true)) {
+                map.overlays.clear()
                 map.overlays.add(
                     Polyline(map).apply {
                         setPoints(points)
@@ -97,6 +106,11 @@ fun RouteMap(
                 val box = BoundingBox.fromGeoPoints(points).increaseByScale(1.2f)
                 map.addOnFirstLayoutListener { _, _, _, _, _ -> map.zoomToBoundingBox(box, false) }
                 map.post { map.zoomToBoundingBox(box, false) }
+            }
+            map.overlays.remove(cursorMarker)
+            if (cursor != null) {
+                cursorMarker.position = cursor
+                map.overlays.add(cursorMarker)
             }
             map.invalidate()
         },

@@ -3,8 +3,13 @@ package dev.aesir1.rowly.ui.activity
 import dev.aesir1.rowly.data.entity.LocationPointEntity
 import dev.aesir1.rowly.location.TrackAccumulator
 
-/** One point on the speed-over-distance chart. */
-data class SpeedSample(val distanceKm: Double, val speedKmh: Double)
+/** One point on the speed-over-distance chart, with the position it was measured at. */
+data class SpeedSample(
+    val distanceKm: Double,
+    val speedKmh: Double,
+    val latitude: Double,
+    val longitude: Double,
+)
 
 /**
  * Builds the speed-over-distance series from stored fixes.
@@ -37,7 +42,12 @@ object SpeedSeries {
                 if (seconds > 0.0) meters / seconds else null
             }
             if (speedMs != null) {
-                raw += SpeedSample(point.cumulativeDistanceM / 1000.0, speedMs * 3.6)
+                raw += SpeedSample(
+                    distanceKm = point.cumulativeDistanceM / 1000.0,
+                    speedKmh = speedMs * 3.6,
+                    latitude = point.latitude,
+                    longitude = point.longitude,
+                )
             }
             previous = point
         }
@@ -53,12 +63,23 @@ object SpeedSeries {
             val to = minOf(((bucket + 1) * bucketSize).toInt().coerceAtLeast(from + 1), samples.size)
             var distance = 0.0
             var speed = 0.0
+            var latitude = 0.0
+            var longitude = 0.0
             for (i in from until to) {
                 distance += samples[i].distanceKm
                 speed += samples[i].speedKmh
+                latitude += samples[i].latitude
+                longitude += samples[i].longitude
             }
             val count = (to - from).toDouble()
-            out += SpeedSample(distance / count, speed / count)
+            // The position is averaged like the rest: a bucket is a few seconds of rowing, so its
+            // mean position is within a boat length of every fix that went into it.
+            out += SpeedSample(
+                distanceKm = distance / count,
+                speedKmh = speed / count,
+                latitude = latitude / count,
+                longitude = longitude / count,
+            )
         }
         return out
     }

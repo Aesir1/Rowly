@@ -195,12 +195,15 @@ class CalibrationViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private fun settings(sensitivity: Double) = UserSettingsEntity(
-        strokeSensitivity = sensitivity,
-        deviceModel = _state.value.deviceModel,
-        sensorName = sensor?.name ?: "",
-        sensorResolution = sensor?.resolution ?: 0f,
-        sensorMaxRange = sensor?.maximumRange ?: 0f,
-        updatedAt = System.currentTimeMillis(),
-    )
+    /** Built on the stored row, not from scratch: the same row carries the user's profile and
+     * a fresh entity would silently wipe it. */
+    private suspend fun settings(sensitivity: Double) =
+        (dao.settings() ?: UserSettingsEntity()).copy(
+            strokeSensitivity = sensitivity,
+            deviceModel = _state.value.deviceModel,
+            sensorName = sensor?.name ?: "",
+            sensorResolution = sensor?.resolution ?: 0f,
+            sensorMaxRange = sensor?.maximumRange ?: 0f,
+            updatedAt = System.currentTimeMillis(),
+        )
 }

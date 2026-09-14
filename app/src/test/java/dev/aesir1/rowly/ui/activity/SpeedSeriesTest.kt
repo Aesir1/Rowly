@@ -12,11 +12,12 @@ class SpeedSeriesTest {
         meters: Double,
         speedMs: Float? = null,
         accepted: Boolean = true,
+        latitude: Double = 52.0,
     ) = LocationPointEntity(
         id = index.toLong(),
         activityId = 1L,
         timestamp = 1_000_000L + index * 1000L,
-        latitude = 52.0,
+        latitude = latitude,
         longitude = 4.0,
         speedMs = speedMs,
         accuracyM = 5f,
@@ -91,6 +92,23 @@ class SpeedSeriesTest {
         assertEquals("end of the track moved", 19.996, series.last().distanceKm, 0.05)
         // Bucket averaging must stay inside the original 10..14 m/s envelope.
         series.forEach { assertTrue(it.speedKmh in 36.0..50.4) }
+    }
+
+    @Test
+    fun `the position travels with the sample through downsampling`() {
+        // The chart marker is placed from these coordinates, so a bucket must keep the position
+        // of the stretch it summarises rather than collapsing to the start of the track.
+        val points = (0 until 1000).map {
+            point(it, it * 4.0, speedMs = 3f, latitude = 52.0 + it * 0.001)
+        }
+        val series = SpeedSeries.build(points, maxPoints = 100)
+        assertEquals(100, series.size)
+        assertEquals(52.0045, series.first().latitude, 1e-6)
+        assertEquals(52.9945, series.last().latitude, 1e-6)
+        assertEquals(4.0, series.last().longitude, 1e-9)
+        series.zipWithNext().forEach { (a, b) ->
+            assertTrue("position went backwards", b.latitude > a.latitude)
+        }
     }
 
     @Test

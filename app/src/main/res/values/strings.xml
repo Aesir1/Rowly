@@ -4,6 +4,7 @@
     <string name="tab_record">Record</string>
     <string name="tab_training">Training</string>
     <string name="tab_activities">Activities</string>
+    <string name="tab_user">User</string>
     <string name="tab_settings">Settings</string>
 
     <string name="stroke_rate">Stroke Rate</string>
@@ -47,16 +48,39 @@
     <string name="no_route">This activity has no recorded route.</string>
     <string name="speed_over_distance">Speed over distance</string>
     <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+
+    <string name="activity_options">Activity options</string>
+    <string name="activity_delete_title">Delete this activity?</string>
+    <string name="activity_delete_body">The route, stroke data and summary of %1$s are removed for good.</string>
+    <string name="sort_by">Sort by</string>
+    <string name="sort_date">Date</string>
+    <string name="sort_rank">Rank</string>
+    <string name="rank_set">Rank</string>
+    <string name="rank_clear">No rank</string>
+    <string name="rank_best_performance">Best performance</string>
+    <string name="rank_great_job">Great job</string>
+    <string name="rank_keep_on_moving">Keep on moving</string>
+    <string name="rank_next_time_probably">Next time probably</string>
+    <string name="rank_what_was_that">What was that</string>
 
     <string name="settings_user">User</string>
-    <string name="settings_user_body">Profile and personal details</string>
-    <string name="settings_user_placeholder">Nothing here yet.</string>
+    <string name="user_first_name">Name</string>
+    <string name="user_last_name">Last name</string>
+    <string name="user_nickname">Nickname</string>
+    <string name="user_language">Language</string>
+    <string name="user_language_system">System default</string>
+    <string name="user_units">Units</string>
+    <string name="units_metric">Metric (km)</string>
+    <string name="units_imperial">Imperial (mi)</string>
     <string name="settings_calibration">Calibration</string>
     <string name="settings_calibration_body">Check the phone\'s stroke rate against an ergometer</string>
 
     <string name="calibration_intro">Put the phone where you row with it, set the ergometer going, and run one minute. Then type in the rate the ergometer showed.</string>
     <string name="calibration_start">Start 1-minute test</string>
-    <string name="calibration_cancel">Cancel test</string>
+    <string name="calibration_cancel">Hold to cancel test</string>
     <string name="calibration_idle">Ready</string>
     <string name="calibration_remaining">%1$d s remaining</string>
     <string name="calibration_no_sensor">This phone has no accelerometer.</string>

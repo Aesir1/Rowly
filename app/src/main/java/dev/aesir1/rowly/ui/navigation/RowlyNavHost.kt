@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -27,6 +28,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,6 +66,7 @@ private val LEFT_TABS = listOf(
 )
 
 private val RIGHT_TABS = listOf(
+    Tab(Routes.USER, R.string.tab_user, Icons.Filled.Person),
     Tab(Routes.SETTINGS, R.string.tab_settings, Icons.Filled.Settings),
 )
 
@@ -91,9 +96,11 @@ fun RowlyApp(navController: NavHostController = rememberNavController()) {
         .container.recordingController
     val recording by controller.state.collectAsState()
 
-    // A live session owns the screen. Leaving it mid-piece is never deliberate - it is a
-    // mis-tap while rowing - so every route out is closed until the hold-to-pause completes.
-    val locked = recording.isLive
+    // A live session owns the screen, and so does a calibration run: leaving either mid-piece is
+    // never deliberate - it is a mis-tap while rowing - so every route out is closed until the
+    // hold-to-confirm completes.
+    var calibrating by remember { mutableStateOf(false) }
+    val locked = recording.isLive || calibrating
     BackHandler(enabled = locked) { }
 
     // Keep the display awake for the duration of a live session - a rower glances at the numbers,
@@ -144,13 +151,17 @@ fun RowlyApp(navController: NavHostController = rememberNavController()) {
                 )
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen(
-                    onOpenUser = { navController.navigate(Routes.USER) },
-                    onOpenCalibration = { navController.navigate(Routes.CALIBRATION) },
-                )
+                SettingsScreen(onOpenCalibration = { navController.navigate(Routes.CALIBRATION) })
             }
             composable(Routes.USER) { UserScreen() }
-            composable(Routes.CALIBRATION) { CalibrationScreen() }
+            composable(Routes.CALIBRATION) {
+                // Inside the destination, not beside the NavHost: the host registers its own back
+                // callback as it composes, and the dispatcher runs the most recently added one
+                // first. A handler declared outside would sit underneath it and the run would be
+                // backed out of. This one is added after, so it wins.
+                BackHandler(enabled = calibrating) { }
+                CalibrationScreen(onRunningChange = { calibrating = it })
+            }
             composable(Routes.ACTIVITY_DETAIL) { entry ->
                 val id = entry.arguments?.getString("activityId")?.toLongOrNull()
                 if (id != null) {
@@ -179,8 +190,8 @@ private fun RowlyBottomBar(
         contentAlignment = Alignment.TopCenter,
     ) {
         NavigationBar(modifier = Modifier.align(Alignment.BottomCenter)) {
-            // Equal weights, not equal item counts: the two sides are two and one, and it is the
-            // widths that have to match for the gap between them to be the centre.
+            // Equal weights, not equal item counts: it is the widths that have to match for the
+            // gap between them to be the centre, whatever each side happens to hold.
             TabGroup(LEFT_TABS, isSelected, locked, onSelect, Modifier.weight(1f))
             Spacer(Modifier.width(RECORD_DIAMETER + 16.dp))
             TabGroup(RIGHT_TABS, isSelected, locked, onSelect, Modifier.weight(1f))
@@ -188,6 +199,7 @@ private fun RowlyBottomBar(
 
         RecordButton(
             selected = isSelected(Routes.RECORD),
+            enabled = !locked,
             onClick = { onSelect(Routes.RECORD) },
             modifier = Modifier.offset(y = -RECORD_OVERHANG),
         )
@@ -216,19 +228,25 @@ private fun TabGroup(
 }
 
 @Composable
-private fun RecordButton(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun RecordButton(
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = CircleShape,
         color = if (selected) {
             MaterialTheme.colorScheme.primary
         } else {
-            MaterialTheme.colorScheme.primaryContainer
+            MaterialTheme.colorScheme.surfaceVariant
         },
         contentColor = if (selected) {
             MaterialTheme.colorScheme.onPrimary
         } else {
-            MaterialTheme.colorScheme.onPrimaryContainer
+            MaterialTheme.colorScheme.onSurfaceVariant
         },
         shadowElevation = 6.dp,
         modifier = modifier.size(RECORD_DIAMETER),

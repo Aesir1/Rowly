@@ -1,8 +1,8 @@
 package dev.aesir1.rowly.ui.activity
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,13 +19,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import androidx.compose.ui.unit.sp
+import dev.aesir1.rowly.R
 import java.util.Locale
 
 /**
@@ -37,6 +42,7 @@ import java.util.Locale
 fun SpeedChart(
     samples: List<SpeedSample>,
     modifier: Modifier = Modifier,
+    onSelect: (SpeedSample?) -> Unit = {},
 ) {
     if (samples.size < 2) return
 
@@ -47,12 +53,16 @@ fun SpeedChart(
     val labelStyle = TextStyle(fontSize = 11.sp, color = axis)
 
     var selected by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(selected) { onSelect(selected?.let { samples[it] }) }
 
     val minDistance = samples.first().distanceKm
     val maxDistance = samples.last().distanceKm
     val distanceSpan = (maxDistance - minDistance).takeIf { it > 1e-9 } ?: 1.0
     val maxSpeed = samples.maxOf { it.speedKmh }
     val minSpeed = samples.minOf { it.speedKmh }
+    val avgSpeed = samples.sumOf { it.speedKmh } / samples.size
+    val avgLabel = referenceLabel(stringResource(R.string.avg_speed), avgSpeed)
+    val maxLabel = referenceLabel(stringResource(R.string.max_speed), maxSpeed)
     // A little headroom either side so the trace never touches the frame.
     val top = maxSpeed + (maxSpeed - minSpeed).coerceAtLeast(1.0) * 0.1
     val bottom = (minSpeed - (maxSpeed - minSpeed).coerceAtLeast(1.0) * 0.1).coerceAtLeast(0.0)
@@ -80,15 +90,27 @@ fun SpeedChart(
                 .fillMaxWidth()
                 .height(180.dp)
                 .pointerInput(samples) {
+                    // One gesture loop for both the tap and the drag. Two detectors in two
+                    // pointerInput nodes cannot share this: detectTapGestures consumes the down,
+                    // and the drag detector then cancels itself at the touch slop, which froze
+                    // the crosshair wherever the finger first landed.
+                    //
                     // The crosshair stays put after the finger lifts: the point of dragging is to
                     // read a value off the chart, and clearing it on release hides the answer.
-                    detectDragGestures { change, _ ->
-                        selected = nearestIndex(change.position.x, size.width, samples.size)
-                    }
-                }
-                .pointerInput(samples) {
-                    detectTapGestures { offset ->
-                        selected = nearestIndex(offset.x, size.width, samples.size)
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        selected = nearestIndex(down.position.x, size.width, samples)
+                        down.consume()
+                        do {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { change ->
+                                if (change.pressed) {
+                                    selected =
+                                        nearestIndex(change.position.x, size.width, samples)
+                                    change.consume()
+                                }
+                            }
+                        } while (event.changes.any { it.pressed })
                     }
                 },
         ) {
@@ -96,8 +118,33 @@ fun SpeedChart(
             fun xOf(index: Int): Float =
                 ((samples[index].distanceKm - minDistance) / distanceSpan).toFloat() * size.width
 
-            fun yOf(index: Int): Float =
-                plotBottom - ((samples[index].speedKmh - bottom) / speedSpan).toFloat() * plotBottom
+            fun yOfSpeed(speed: Double): Float =
+                plotBottom - ((speed - bottom) / speedSpan).toFloat() * plotBottom
+
+            fun yOf(index: Int): Float = yOfSpeed(samples[index].speedKmh)
+
+            // Dashed so they read as references rather than as a second trace.
+            val dash = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
+            fun reference(speed: Double, label: String) {
+                val y = yOfSpeed(speed)
+                drawLine(
+                    color = axis.copy(alpha = 0.6f),
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = dash,
+                )
+                val labelSize = measurer.measure(label, labelStyle).size
+                drawText(
+                    measurer,
+                    label,
+                    topLeft = Offset(
+                        size.width - labelSize.width,
+                        (y - labelSize.height - 2.dp.toPx()).coerceAtLeast(0f),
+                    ),
+                    style = labelStyle,
+                )
+            }
 
             val path = Path().apply {
                 moveTo(xOf(0), yOf(0))
@@ -118,6 +165,8 @@ fun SpeedChart(
                 ),
             )
             drawPath(path, color = line, style = Stroke(width = 2.dp.toPx()))
+            reference(avgSpeed, avgLabel)
+            reference(maxSpeed, maxLabel)
             drawLine(
                 color = axis.copy(alpha = 0.4f),
                 start = Offset(0f, plotBottom),
@@ -160,8 +209,21 @@ fun SpeedChart(
     }
 }
 
-private fun nearestIndex(x: Float, width: Int, count: Int): Int {
-    if (width <= 0) return 0
-    val fraction = (x / width).coerceIn(0f, 1f)
-    return (fraction * (count - 1)).toInt().coerceIn(0, count - 1)
+private fun referenceLabel(name: String, speed: Double): String =
+    String.format(Locale.getDefault(), "%s %.1f km/h", name, speed)
+
+/**
+ * The sample nearest the touch, measured in distance - the same axis the chart is drawn on.
+ *
+ * Picking by index instead would only agree with the drawing when the samples are evenly spaced
+ * in distance, and they never are: a session that starts with the boat sitting still stacks a
+ * crowd of points on x = 0, and the crosshair would then sit nowhere near the finger.
+ */
+private fun nearestIndex(x: Float, width: Int, samples: List<SpeedSample>): Int {
+    if (width <= 0 || samples.isEmpty()) return 0
+    val start = samples.first().distanceKm
+    val span = samples.last().distanceKm - start
+    if (span <= 0.0) return 0
+    val target = start + (x / width).coerceIn(0f, 1f) * span
+    return samples.indices.minBy { abs(samples[it].distanceKm - target) }
 }
