@@ -1,9 +1,11 @@
 package dev.aesir1.rowly.ui.activity
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.ShapeDrawable
 import android.graphics.drawable.shapes.OvalShape
+import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -37,6 +39,9 @@ private const val CURSOR_COLOR = 0xFFF2A007.toInt()
  * account. It is a classic Android View, so it is held across recompositions and its lifecycle is
  * driven by hand.
  */
+// The touch listener only forwards ownership of the gesture; the map's own accessibility
+// handling is untouched, so the click-through warning does not apply.
+@SuppressLint("ClickableViewAccessibility")
 @Composable
 fun RouteMap(
     points: List<GeoPoint>,
@@ -54,6 +59,18 @@ fun RouteMap(
             setMultiTouchControls(true)
             setUseDataConnection(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.ALWAYS)
+            // The map lives inside a scrolling column, which otherwise steals every vertical
+            // drag: panning the map scrolled the page instead. A touch that starts on the map
+            // belongs to the map until the finger lifts.
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN ->
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+                false
+            }
         }
     }
 

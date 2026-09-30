@@ -29,6 +29,8 @@ object SpeedSeries {
         val accepted = points.filter { it.acceptedForDistance }
         if (accepted.isEmpty()) return emptyList()
 
+        val config = TrackAccumulator.Config()
+        val window = ArrayDeque<Double>()
         val raw = ArrayList<SpeedSample>(accepted.size)
         var previous: LocationPointEntity? = null
         for (point in accepted) {
@@ -41,15 +43,20 @@ object SpeedSeries {
                 val meters = point.cumulativeDistanceM - prev.cumulativeDistanceM
                 if (seconds > 0.0) meters / seconds else null
             }
-            if (speedMs != null) {
-                raw += SpeedSample(
-                    distanceKm = point.cumulativeDistanceM / 1000.0,
-                    speedKmh = speedMs * 3.6,
-                    latitude = point.latitude,
-                    longitude = point.longitude,
-                )
-            }
             previous = point
+            val speedKmh = (speedMs ?: continue) * 3.6
+            // Same cap and moving average as the live figure: the stored max the stats card
+            // shows is the max of the smoothed series, so charting the raw speeds made the
+            // chart's peak disagree with the card.
+            if (speedKmh > config.maxDisplaySpeedKmh) continue
+            window.addLast(speedKmh)
+            while (window.size > config.speedWindow) window.removeFirst()
+            raw += SpeedSample(
+                distanceKm = point.cumulativeDistanceM / 1000.0,
+                speedKmh = window.average(),
+                latitude = point.latitude,
+                longitude = point.longitude,
+            )
         }
         return downsample(raw, maxPoints)
     }

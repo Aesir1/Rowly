@@ -85,13 +85,37 @@ class SpeedSeriesTest {
 
     @Test
     fun `a long session is downsampled without distorting the range`() {
-        val points = (0 until 5000).map { point(it, it * 4.0, speedMs = (10 + it % 5).toFloat()) }
+        val points = (0 until 5000).map { point(it, it * 4.0, speedMs = (3 + it % 5).toFloat()) }
         val series = SpeedSeries.build(points, maxPoints = 400)
         assertEquals(400, series.size)
         assertEquals("start of the track moved", 0.0, series.first().distanceKm, 0.05)
         assertEquals("end of the track moved", 19.996, series.last().distanceKm, 0.05)
-        // Bucket averaging must stay inside the original 10..14 m/s envelope.
-        series.forEach { assertTrue(it.speedKmh in 36.0..50.4) }
+        // Smoothing and bucket averaging must stay inside the original 3..7 m/s envelope.
+        series.forEach { assertTrue(it.speedKmh in 10.8..25.2) }
+    }
+
+    @Test
+    fun `the peak is smoothed the same way as the stored max`() {
+        // The stats card shows TrackAccumulator's max, a 3-sample moving average. One hot fix
+        // must not push the chart's peak above it.
+        val speeds = listOf(2f, 2f, 5f, 2f, 2f)
+        val points = speeds.mapIndexed { i, s -> point(i, i * 4.0, speedMs = s) }
+        val series = SpeedSeries.build(points)
+        val smoothedPeak = (2.0 + 2.0 + 5.0) / 3 * 3.6
+        assertEquals(smoothedPeak, series.maxOf { it.speedKmh }, 1e-9)
+    }
+
+    @Test
+    fun `speeds beyond the display cap are dropped`() {
+        val points = listOf(
+            point(0, 0.0, speedMs = 3f),
+            // 36 km/h: not a rowing boat, and the live figure never counted it either.
+            point(1, 40.0, speedMs = 10f),
+            point(2, 44.0, speedMs = 3f),
+        )
+        val series = SpeedSeries.build(points)
+        assertEquals(2, series.size)
+        series.forEach { assertTrue(it.speedKmh <= 30.0) }
     }
 
     @Test

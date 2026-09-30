@@ -16,7 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -41,6 +44,10 @@ import java.util.Locale
 @Composable
 fun SpeedChart(
     samples: List<SpeedSample>,
+    /** The stored session average, so the reference line agrees with the statistics card. */
+    avgSpeedKmh: Double,
+    /** The stored session maximum, same reason. */
+    maxSpeedKmh: Double,
     modifier: Modifier = Modifier,
     onSelect: (SpeedSample?) -> Unit = {},
 ) {
@@ -49,8 +56,11 @@ fun SpeedChart(
     val line = MaterialTheme.colorScheme.primary
     val crosshair = MaterialTheme.colorScheme.secondary
     val axis = MaterialTheme.colorScheme.onSurfaceVariant
+    val referenceColor = MaterialTheme.colorScheme.tertiary
+    val labelBackground = MaterialTheme.colorScheme.surface
     val measurer = rememberTextMeasurer()
     val labelStyle = TextStyle(fontSize = 11.sp, color = axis)
+    val referenceStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = referenceColor)
 
     var selected by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(selected) { onSelect(selected?.let { samples[it] }) }
@@ -58,11 +68,12 @@ fun SpeedChart(
     val minDistance = samples.first().distanceKm
     val maxDistance = samples.last().distanceKm
     val distanceSpan = (maxDistance - minDistance).takeIf { it > 1e-9 } ?: 1.0
-    val maxSpeed = samples.maxOf { it.speedKmh }
+    // The stored max can sit a hair above the trace's own peak (downsampling averages buckets),
+    // so the scale is sized to whichever is higher.
+    val maxSpeed = maxOf(samples.maxOf { it.speedKmh }, maxSpeedKmh)
     val minSpeed = samples.minOf { it.speedKmh }
-    val avgSpeed = samples.sumOf { it.speedKmh } / samples.size
-    val avgLabel = referenceLabel(stringResource(R.string.avg_speed), avgSpeed)
-    val maxLabel = referenceLabel(stringResource(R.string.max_speed), maxSpeed)
+    val avgLabel = referenceLabel(stringResource(R.string.avg_speed), avgSpeedKmh)
+    val maxLabel = referenceLabel(stringResource(R.string.max_speed), maxSpeedKmh)
     // A little headroom either side so the trace never touches the frame.
     val top = maxSpeed + (maxSpeed - minSpeed).coerceAtLeast(1.0) * 0.1
     val bottom = (minSpeed - (maxSpeed - minSpeed).coerceAtLeast(1.0) * 0.1).coerceAtLeast(0.0)
@@ -79,7 +90,7 @@ fun SpeedChart(
                     readout.speedKmh,
                 )
             } else {
-                String.format(Locale.getDefault(), "%.1f - %.1f km/h", minSpeed, maxSpeed)
+                String.format(Locale.getDefault(), "%.1f - %.1f km/h", minSpeed, maxSpeedKmh)
             },
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -125,25 +136,30 @@ fun SpeedChart(
 
             // Dashed so they read as references rather than as a second trace.
             val dash = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx()))
-            fun reference(speed: Double, label: String) {
+            // Max sits above its line and avg below, so the two labels cannot collide when the
+            // session was steady and the lines run close together.
+            fun reference(speed: Double, label: String, labelBelow: Boolean) {
                 val y = yOfSpeed(speed)
                 drawLine(
-                    color = axis.copy(alpha = 0.6f),
+                    color = referenceColor,
                     start = Offset(0f, y),
                     end = Offset(size.width, y),
-                    strokeWidth = 1.dp.toPx(),
+                    strokeWidth = 1.5.dp.toPx(),
                     pathEffect = dash,
                 )
-                val labelSize = measurer.measure(label, labelStyle).size
-                drawText(
-                    measurer,
-                    label,
-                    topLeft = Offset(
-                        size.width - labelSize.width,
-                        (y - labelSize.height - 2.dp.toPx()).coerceAtLeast(0f),
-                    ),
-                    style = labelStyle,
+                val layout = measurer.measure(label, referenceStyle)
+                val pad = 3.dp.toPx()
+                val textTop = (if (labelBelow) y + pad else y - layout.size.height - pad)
+                    .coerceIn(0f, plotBottom - layout.size.height)
+                val textLeft = size.width - layout.size.width - pad
+                // A backing chip: without it the label drowns wherever the trace crosses it.
+                drawRoundRect(
+                    color = labelBackground.copy(alpha = 0.85f),
+                    topLeft = Offset(textLeft - pad, textTop - pad / 2),
+                    size = Size(layout.size.width + pad * 2, layout.size.height + pad),
+                    cornerRadius = CornerRadius(4.dp.toPx()),
                 )
+                drawText(measurer, label, topLeft = Offset(textLeft, textTop), style = referenceStyle)
             }
 
             val path = Path().apply {
@@ -165,8 +181,8 @@ fun SpeedChart(
                 ),
             )
             drawPath(path, color = line, style = Stroke(width = 2.dp.toPx()))
-            reference(avgSpeed, avgLabel)
-            reference(maxSpeed, maxLabel)
+            reference(avgSpeedKmh, avgLabel, labelBelow = true)
+            reference(maxSpeedKmh, maxLabel, labelBelow = false)
             drawLine(
                 color = axis.copy(alpha = 0.4f),
                 start = Offset(0f, plotBottom),
