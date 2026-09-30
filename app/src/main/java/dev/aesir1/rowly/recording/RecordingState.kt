@@ -1,6 +1,7 @@
 package dev.aesir1.rowly.recording
 
 import dev.aesir1.rowly.sensors.Reading
+import dev.aesir1.rowly.training.PhaseType
 
 /**
  * The explicit recording state. Recording is driven by this, never by what the UI happens to be
@@ -32,7 +33,25 @@ data class RecordingUiState(
     val strokeRate: Reading = Reading.NoData(Reading.Reason.WARMING_UP),
     val gpsAvailable: Boolean = true,
     val finishedActivityId: Long? = null,
+    /** Seconds left before an armed training starts recording, or null when not counting down. */
+    val countdownSeconds: Int? = null,
+    /** Progress through the armed training. Null on every normal recording - the UI keys off it. */
+    val training: TrainingProgress? = null,
+    /** True when the session runs on an ergometer: no GPS, distance is SPM-derived. */
+    val ergometer: Boolean = false,
 ) {
     val isLive: Boolean
         get() = phase == RecordingPhase.Recording || phase == RecordingPhase.PauseConfirmation
 }
+
+/** What the Record screen needs to render the running training. */
+data class TrainingProgress(
+    val name: String,
+    val phaseIndex: Int,
+    val totalPhases: Int,
+    val phaseType: PhaseType,
+    val phaseGoalDurationMs: Long?,
+    val phaseGoalDistanceM: Double?,
+    val phaseProgress: Float,
+    val complete: Boolean,
+)

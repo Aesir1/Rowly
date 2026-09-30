@@ -27,6 +27,10 @@ data class ActivityEntity(
     val averageSpm: Double?,
     /** How the rower judged the session afterwards. Null until they say. */
     val rank: ActivityRank? = null,
+    /** True when the session ran on an ergometer: no GPS, distance is SPM-derived. */
+    val ergometer: Boolean = false,
+    /** Name of the training the session followed, or null for a free recording. */
+    val trainingName: String? = null,
 )
 
 /**

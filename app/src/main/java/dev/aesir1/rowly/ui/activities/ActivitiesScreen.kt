@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -50,6 +52,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -68,18 +71,50 @@ class ActivitiesViewModel(application: Application) : AndroidViewModel(applicati
     private val _sort = MutableStateFlow(ActivitySort.DATE)
     val sort: StateFlow<ActivitySort> = _sort.asStateFlow()
 
+    companion object {
+        /**
+         * Stands in for "no training" in the filter set. The empty string cannot collide with a
+         * real training: presets are named and the editor refuses a blank name.
+         */
+        const val FREE_RECORDING = ""
+    }
+
+    /** The trainings to show. Empty means no filter - every session. */
+    private val _trainingFilter = MutableStateFlow<Set<String>>(emptySet())
+    val trainingFilter: StateFlow<Set<String>> = _trainingFilter.asStateFlow()
+
+    /** Every training that actually occurs in the recorded sessions - the filter's options. */
+    val trainingNames: StateFlow<List<String>> = repository.observeActivities()
+        .map { rows -> rows.mapNotNull { it.trainingName }.distinct() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /**
      * The DAO already returns createdAt DESC, and [sortedBy] is stable, so ranking only regroups
      * the rows and leaves newest-first intact inside each grade. Unranked sessions land last.
      */
     val activities: StateFlow<List<ActivityEntity>> =
-        combine(repository.observeActivities(), _sort) { rows, sort ->
-            if (sort == ActivitySort.DATE) rows
-            else rows.sortedBy { it.rank?.ordinal ?: ActivityRank.entries.size }
+        combine(repository.observeActivities(), _sort, _trainingFilter) { rows, sort, filter ->
+            val filtered = if (filter.isEmpty()) {
+                rows
+            } else {
+                rows.filter { (it.trainingName ?: FREE_RECORDING) in filter }
+            }
+            if (sort == ActivitySort.DATE) filtered
+            else filtered.sortedBy { it.rank?.ordinal ?: ActivityRank.entries.size }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setSort(value: ActivitySort) {
         _sort.value = value
+    }
+
+    fun toggleTrainingFilter(name: String) {
+        _trainingFilter.value =
+            if (name in _trainingFilter.value) _trainingFilter.value - name
+            else _trainingFilter.value + name
+    }
+
+    fun clearTrainingFilter() {
+        _trainingFilter.value = emptySet()
     }
 
     fun setRank(id: Long, rank: ActivityRank?) {
@@ -98,10 +133,19 @@ fun ActivitiesScreen(
 ) {
     val activities by viewModel.activities.collectAsState()
     val sort by viewModel.sort.collectAsState()
+    val trainingNames by viewModel.trainingNames.collectAsState()
+    val trainingFilter by viewModel.trainingFilter.collectAsState()
     var pendingDelete by remember { mutableStateOf<ActivityEntity?>(null) }
 
     Column(Modifier.fillMaxSize()) {
-        SortBar(sort, viewModel::setSort)
+        FilterSortBar(
+            trainingNames = trainingNames,
+            selected = trainingFilter,
+            onToggle = viewModel::toggleTrainingFilter,
+            onClear = viewModel::clearTrainingFilter,
+            sort = sort,
+            onSort = viewModel::setSort,
+        )
 
         if (activities.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -153,18 +197,80 @@ fun ActivitiesScreen(
     }
 }
 
+/**
+ * One line: the training filter button on the left, sorting on the right. The filter opens a
+ * popup where any mix of trainings can be ticked; nothing ticked means everything shows.
+ */
 @Composable
-private fun SortBar(sort: ActivitySort, onSort: (ActivitySort) -> Unit) {
+private fun FilterSortBar(
+    trainingNames: List<String>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+    onClear: () -> Unit,
+    sort: ActivitySort,
+    onSort: (ActivitySort) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = stringResource(R.string.sort_by),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (trainingNames.isNotEmpty()) {
+            var open by remember { mutableStateOf(false) }
+            Box {
+                FilterChip(
+                    selected = selected.isNotEmpty(),
+                    onClick = { open = true },
+                    label = {
+                        Text(
+                            if (selected.isEmpty()) {
+                                stringResource(R.string.filter_training)
+                            } else {
+                                stringResource(R.string.filter_training_count, selected.size)
+                            },
+                        )
+                    },
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
+                )
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.filter_all)) },
+                        onClick = {
+                            onClear()
+                            open = false
+                        },
+                        trailingIcon = if (selected.isEmpty()) {
+                            { Text("✓") }
+                        } else {
+                            null
+                        },
+                    )
+                    HorizontalDivider()
+                    // Sessions recorded without any training plan.
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.filter_free)) },
+                        onClick = { onToggle(ActivitiesViewModel.FREE_RECORDING) },
+                        leadingIcon = {
+                            Checkbox(
+                                checked = ActivitiesViewModel.FREE_RECORDING in selected,
+                                onCheckedChange = null,
+                            )
+                        },
+                    )
+                    trainingNames.forEach { name ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            // The menu stays open: picking several trainings is the point.
+                            onClick = { onToggle(name) },
+                            leadingIcon = {
+                                Checkbox(checked = name in selected, onCheckedChange = null)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
         ActivitySort.entries.forEach { option ->
             FilterChip(
                 selected = sort == option,
@@ -195,6 +301,23 @@ private fun ActivityCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // Same session-kind line the detail screen shows: which training it
+                    // followed, and that it ran on an ergometer.
+                    val sessionKind = listOfNotNull(
+                        activity.trainingName,
+                        if (activity.ergometer) {
+                            stringResource(R.string.training_ergometer_label)
+                        } else {
+                            null
+                        },
+                    ).joinToString("  -  ")
+                    if (sessionKind.isNotEmpty()) {
+                        Text(
+                            text = sessionKind,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     activity.rank?.let {
                         Text(
                             text = stringResource(it.labelRes),

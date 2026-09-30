@@ -7,6 +7,7 @@ import androidx.room.Upsert
 import dev.aesir1.rowly.data.entity.ActivityEntity
 import dev.aesir1.rowly.data.entity.ActivityRank
 import dev.aesir1.rowly.data.entity.CalibrationSampleEntity
+import dev.aesir1.rowly.data.entity.CustomTrainingEntity
 import dev.aesir1.rowly.data.entity.UserSettingsEntity
 import dev.aesir1.rowly.data.entity.LocationPointEntity
 import dev.aesir1.rowly.data.entity.StrokeRateSampleEntity
@@ -60,6 +61,19 @@ interface StrokeRateDao {
 
     @Query("SELECT * FROM stroke_rate_samples WHERE activityId = :activityId ORDER BY timestamp ASC")
     suspend fun getForActivity(activityId: Long): List<StrokeRateSampleEntity>
+}
+
+/** Custom trainings. No repository wrapper - same reasoning as [SettingsDao]. */
+@Dao
+interface TrainingDao {
+    @Query("SELECT * FROM custom_trainings ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<CustomTrainingEntity>>
+
+    @Insert
+    suspend fun insert(training: CustomTrainingEntity): Long
+
+    @Query("DELETE FROM custom_trainings WHERE id = :id")
+    suspend fun delete(id: Long)
 }
 
 /** Settings and calibration history. No repository wrapper - it would forward and nothing else. */

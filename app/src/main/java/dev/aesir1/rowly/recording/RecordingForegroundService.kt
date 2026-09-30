@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import dev.aesir1.rowly.MainActivity
@@ -17,12 +18,16 @@ import dev.aesir1.rowly.RowlyApplication
 import dev.aesir1.rowly.location.LocationTracker
 import dev.aesir1.rowly.location.LocationUpdate
 import dev.aesir1.rowly.sensors.AccelerometerCollector
+import dev.aesir1.rowly.training.PhaseType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -44,6 +49,11 @@ class RecordingForegroundService : Service() {
     private var locationJob: Job? = null
     private var sensing = false
 
+    // Voice announcements for training phase changes. Only created when a training is armed.
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var pendingSpeech: String? = null
+
     /**
      * The state flow replays its current value the moment it is collected, and at that point the
      * session has not been started yet - onStartCommand runs after onCreate. Without this guard
@@ -57,12 +67,30 @@ class RecordingForegroundService : Service() {
         controller = (application as RowlyApplication).container.recordingController
         tracker = LocationTracker(this)
         createChannel()
+        // An ergometer session runs without location permission being exercised, and starting a
+        // location-typed foreground service without it throws. Health is the honest type there.
+        val serviceType = if (controller.ergometerMode) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+        } else {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
             buildNotification(controller.state.value),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+            serviceType,
         )
+        if (controller.armedTraining != null) {
+            tts = TextToSpeech(this) { status ->
+                ttsReady = status == TextToSpeech.SUCCESS
+                if (ttsReady) pendingSpeech?.let(::speak)
+            }
+            scope.launch {
+                controller.state.map { it.training }.filterNotNull()
+                    .distinctUntilChangedBy { it.phaseIndex to it.complete }
+                    .collect(::announce)
+            }
+        }
         scope.launch {
             controller.state.collect { state ->
                 applyPhase(state)
@@ -84,8 +112,48 @@ class RecordingForegroundService : Service() {
 
     override fun onDestroy() {
         stopSensing()
+        tts?.shutdown()
+        tts = null
         scope.cancel()
         super.onDestroy()
+    }
+
+    private fun announce(progress: TrainingProgress) {
+        val text = if (progress.complete) {
+            getString(R.string.training_announce_complete)
+        } else {
+            val type = getString(
+                when (progress.phaseType) {
+                    PhaseType.RECOVERY -> R.string.training_phase_recovery
+                    PhaseType.STRENGTH -> R.string.training_phase_strength
+                    PhaseType.SPEED -> R.string.training_phase_speed
+                },
+            )
+            val goal = progress.phaseGoalDistanceM?.let { meters ->
+                val m = meters.toInt()
+                resources.getQuantityString(R.plurals.training_goal_speech_meters, m, m)
+            } ?: run {
+                val seconds = ((progress.phaseGoalDurationMs ?: 0L) / 1000).toInt()
+                if (seconds % 60 == 0 && seconds > 0) {
+                    val minutes = seconds / 60
+                    resources.getQuantityString(R.plurals.training_goal_speech_minutes, minutes, minutes)
+                } else {
+                    resources.getQuantityString(R.plurals.training_goal_speech_seconds, seconds, seconds)
+                }
+            }
+            getString(R.string.training_announce_phase, type, goal)
+        }
+        speak(text)
+    }
+
+    private fun speak(text: String) {
+        if (!ttsReady) {
+            // The engine binds asynchronously; the opening phase would otherwise be swallowed.
+            pendingSpeech = text
+            return
+        }
+        pendingSpeech = null
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "rowly-training")
     }
 
     private fun applyPhase(state: RecordingUiState) {
@@ -118,7 +186,8 @@ class RecordingForegroundService : Service() {
             source = controller.strokeRateSource,
         ).also { it.start() }
 
-        if (LocationTracker.hasPermission(this)) {
+        // An ergometer session needs no GPS at all - distance is derived from the stroke rate.
+        if (!controller.ergometerMode && LocationTracker.hasPermission(this)) {
             locationJob = scope.launch {
                 tracker.updates().collect { update ->
                     when (update) {

@@ -172,6 +172,19 @@ private fun Statistics(activity: ActivityEntity) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // What kind of session this was: which training it followed, and that the distance
+            // is ergometer-derived rather than GPS.
+            val sessionKind = listOfNotNull(
+                activity.trainingName,
+                if (activity.ergometer) stringResource(R.string.training_ergometer_label) else null,
+            ).joinToString("  -  ")
+            if (sessionKind.isNotEmpty()) {
+                Text(
+                    sessionKind,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             StatRow(stringResource(R.string.duration), formatElapsed(activity.durationMs))
             StatRow(

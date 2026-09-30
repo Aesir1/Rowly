@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,10 +23,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,9 +52,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.aesir1.rowly.R
 import dev.aesir1.rowly.recording.RecordingPhase
 import dev.aesir1.rowly.recording.RecordingUiState
+import dev.aesir1.rowly.recording.TrainingProgress
 import dev.aesir1.rowly.recording.formatElapsed
 import dev.aesir1.rowly.sensors.Reading
+import dev.aesir1.rowly.training.PhaseType
+import dev.aesir1.rowly.ui.theme.PhaseColor
 import dev.aesir1.rowly.ui.theme.RowlyText
+import dev.aesir1.rowly.ui.theme.phaseColor
 import java.util.Locale
 
 /**
@@ -97,32 +105,76 @@ fun RecordScreen(
         }
     }
 
+    // Arriving here with a training armed starts the countdown by itself - the user already
+    // pressed the training, another Start would be a second ask for the same thing.
+    LaunchedEffect(Unit) {
+        if (viewModel.trainingArmed && state.phase == RecordingPhase.Idle &&
+            state.countdownSeconds == null
+        ) {
+            if (!viewModel.start()) showGate = true
+        }
+    }
+
+    val countdown = state.countdownSeconds
+    if (countdown != null) {
+        CountdownView(
+            name = viewModel.armedTrainingName.orEmpty(),
+            seconds = countdown,
+            onCancel = viewModel::cancelCountdown,
+        )
+        return
+    }
+
+    val training = state.training
+    val phaseColors = training?.phaseType?.phaseColor()
+    // The screen wears the current phase's color while a training runs. Every text inherits the
+    // matching on-color, so contrast holds on all three backgrounds in both themes. A normal
+    // recording has training == null and none of this applies.
+    val phaseActive = phaseColors != null &&
+        state.phase != RecordingPhase.Idle && state.phase != RecordingPhase.Finished
+    val secondaryText = if (phaseActive) {
+        phaseColors!!.on.copy(alpha = 0.75f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .then(if (phaseActive) Modifier.background(phaseColors!!.container) else Modifier)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (state.isLive && !state.gpsAvailable) {
+      CompositionLocalProvider(
+          LocalContentColor provides if (phaseActive) phaseColors!!.on else LocalContentColor.current,
+      ) {
+        if (state.isLive && !state.ergometer && !state.gpsAvailable) {
             Banner(stringResource(R.string.gps_signal_unavailable))
             Spacer(Modifier.height(12.dp))
         }
 
-        StrokeRateBlock(state)
+        if (training != null && phaseActive) {
+            TrainingHeader(training, phaseColors!!)
+            Spacer(Modifier.height(16.dp))
+        }
+
+        StrokeRateBlock(state, secondaryText)
         Spacer(Modifier.height(24.dp))
-        Metric(stringResource(R.string.time), formatElapsed(state.elapsedMs), null)
+        Metric(stringResource(R.string.time), formatElapsed(state.elapsedMs), null, secondaryText)
         Spacer(Modifier.height(16.dp))
         Metric(
             stringResource(R.string.distance),
             String.format(Locale.getDefault(), "%.2f", state.distanceKm),
             stringResource(R.string.unit_km),
+            secondaryText,
         )
         Spacer(Modifier.height(16.dp))
         Metric(
             stringResource(R.string.speed),
             state.speedKmh?.let { String.format(Locale.getDefault(), "%.1f", it) } ?: "--",
             stringResource(R.string.unit_kmh),
+            secondaryText,
         )
 
         Spacer(Modifier.height(32.dp))
@@ -189,19 +241,79 @@ fun RecordScreen(
             }
         }
         Spacer(Modifier.height(24.dp))
+      }
     }
 }
+
+/** Ten seconds to put the phone down before the training starts recording. */
+@Composable
+private fun CountdownView(name: String, seconds: Int, onCancel: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(text = name, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(16.dp))
+        Text(text = seconds.toString(), style = RowlyText.Hero)
+        Spacer(Modifier.height(32.dp))
+        OutlinedButton(onClick = onCancel) {
+            Text(stringResource(R.string.training_countdown_cancel))
+        }
+    }
+}
+
+/** Which phase is running, how far through it is, and that the plan has finished. */
+@Composable
+private fun TrainingHeader(training: TrainingProgress, colors: PhaseColor) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = if (training.complete) {
+                    stringResource(R.string.training_announce_complete)
+                } else {
+                    phaseLabel(training.phaseType)
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.training_phase_of,
+                    training.phaseIndex + 1,
+                    training.totalPhases,
+                ),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = { if (training.complete) 1f else training.phaseProgress },
+            modifier = Modifier.fillMaxWidth(),
+            color = colors.on,
+            trackColor = colors.on.copy(alpha = 0.25f),
+        )
+    }
+}
+
+@Composable
+private fun phaseLabel(type: PhaseType): String = stringResource(
+    when (type) {
+        PhaseType.RECOVERY -> R.string.training_phase_recovery
+        PhaseType.STRENGTH -> R.string.training_phase_strength
+        PhaseType.SPEED -> R.string.training_phase_speed
+    },
+)
 
 /**
  * The headline. When the detector cannot establish a reliable rate this says so in words rather
  * than showing a stale or invented number.
  */
 @Composable
-private fun StrokeRateBlock(state: RecordingUiState) {
+private fun StrokeRateBlock(state: RecordingUiState, secondary: Color) {
     Text(
         text = stringResource(R.string.stroke_rate),
         style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = secondary,
     )
     when (val reading = state.strokeRate) {
         is Reading.Valid -> {
@@ -219,7 +331,7 @@ private fun StrokeRateBlock(state: RecordingUiState) {
             Text(
                 text = stringResource(R.string.spm),
                 style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = secondary,
             )
         }
 
@@ -232,7 +344,7 @@ private fun StrokeRateBlock(state: RecordingUiState) {
                 text = stringResource(R.string.no_stroke_data),
                 style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = secondary,
                 modifier = Modifier.padding(vertical = 24.dp),
             )
         }
@@ -240,12 +352,12 @@ private fun StrokeRateBlock(state: RecordingUiState) {
 }
 
 @Composable
-private fun Metric(label: String, value: String, unit: String?) {
+private fun Metric(label: String, value: String, unit: String?, secondary: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = label,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = secondary,
         )
         Row(verticalAlignment = Alignment.Bottom) {
             Text(text = value, style = RowlyText.Metric)
@@ -255,7 +367,7 @@ private fun Metric(label: String, value: String, unit: String?) {
                     text = unit,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(bottom = 8.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondary,
                 )
             }
         }

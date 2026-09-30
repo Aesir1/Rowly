@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.LocaleList
 import dev.aesir1.rowly.data.database.RowlyDatabase
 import dev.aesir1.rowly.data.database.SettingsDao
+import dev.aesir1.rowly.data.database.TrainingDao
 import dev.aesir1.rowly.data.repository.ActivityRepository
 import dev.aesir1.rowly.recording.RecordingController
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,8 @@ class AppContainer(context: Context) {
     }
 
     val settingsDao: SettingsDao by lazy { database.settingsDao() }
+
+    val trainingDao: TrainingDao by lazy { database.trainingDao() }
 
     /** Process-scoped: the recording outlives every screen and ViewModel. */
     val recordingController: RecordingController by lazy { RecordingController(repository) }

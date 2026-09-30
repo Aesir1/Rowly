@@ -36,8 +36,48 @@
     <string name="recording_active">Rowly is recording</string>
     <string name="recording_paused">Rowly is paused</string>
 
-    <string name="training_placeholder_title">Training</string>
-    <string name="training_placeholder_body">Structured training sessions are coming later.</string>
+    <string name="training_title">Training</string>
+    <string name="training_create">Create training</string>
+    <string name="training_name_hint">Training name</string>
+    <string name="training_add_phase">Add phase</string>
+    <string name="training_phase_recovery">Recovery</string>
+    <string name="training_phase_strength">Strength</string>
+    <string name="training_phase_speed">Speed</string>
+    <string name="training_goal_time">Time</string>
+    <string name="training_goal_distance">Distance</string>
+    <string name="training_unit_minutes">min</string>
+    <string name="training_unit_meters">m</string>
+    <string name="training_where_title">Where are you rowing?</string>
+    <string name="training_where_boat">Rowing boat</string>
+    <string name="training_where_erg">Ergometer</string>
+    <string name="training_countdown_cancel">Cancel</string>
+    <string name="training_phase_of">Phase %1$d/%2$d</string>
+    <string name="training_announce_phase">%1$s, %2$s</string>
+    <string name="training_announce_complete">Training complete</string>
+    <string name="training_ergometer_label">Ergometer</string>
+    <string name="training_delete_title">Delete this training?</string>
+    <string name="training_delete_body">%1$s is removed for good.</string>
+    <string name="training_delete_option">Delete training</string>
+    <string name="training_preset_pyramid_name">Pyramid to 5 minutes</string>
+    <string name="training_preset_pyramid_desc">Speed blocks growing from 1 to 5 minutes and back down, with a minute of recovery between them.</string>
+    <string name="training_preset_tabata_name">Tabata 20 minutes</string>
+    <string name="training_preset_tabata_desc">Warm up, then 24 rounds of 20 seconds hard and 10 seconds off, and cool down.</string>
+    <string name="training_preset_500_name">500m x 10 with 1 minute rest</string>
+    <string name="training_preset_500_desc">Ten 500 m speed pieces, one minute of recovery between each.</string>
+    <string name="training_preset_half_name">Half marathon</string>
+    <string name="training_preset_half_desc">21,097 m at a steady endurance effort, with a 10 minute warm-up and a 5 minute cool-down.</string>
+    <plurals name="training_goal_speech_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="training_goal_speech_seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
+    <plurals name="training_goal_speech_meters">
+        <item quantity="one">%d meter</item>
+        <item quantity="other">%d meters</item>
+    </plurals>
 
     <string name="no_activities">No recorded activities yet.</string>
     <string name="activity_title">Activity</string>
@@ -56,6 +96,10 @@
     <string name="activity_delete_title">Delete this activity?</string>
     <string name="activity_delete_body">The route, stroke data and summary of %1$s are removed for good.</string>
     <string name="sort_by">Sort by</string>
+    <string name="filter_training">Training</string>
+    <string name="filter_training_count">Training (%1$d)</string>
+    <string name="filter_all">All</string>
+    <string name="filter_free">Free recording</string>
     <string name="sort_date">Date</string>
     <string name="sort_rank">Rank</string>
     <string name="rank_set">Rank</string>

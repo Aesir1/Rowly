@@ -20,7 +20,11 @@ class ActivityRepository(
     fun observeActivity(id: Long): Flow<ActivityEntity?> = activityDao.observe(id)
 
     /** Creates the row up front so samples have something to hang off while recording. */
-    suspend fun startActivity(startTime: Long): Long = activityDao.insert(
+    suspend fun startActivity(
+        startTime: Long,
+        ergometer: Boolean = false,
+        trainingName: String? = null,
+    ): Long = activityDao.insert(
         ActivityEntity(
             createdAt = startTime,
             startTime = startTime,
@@ -30,6 +34,8 @@ class ActivityRepository(
             averageSpeedKmh = 0.0,
             maxSpeedKmh = 0.0,
             averageSpm = null,
+            ergometer = ergometer,
+            trainingName = trainingName,
         ),
     )
 

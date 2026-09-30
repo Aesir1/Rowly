@@ -8,6 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.aesir1.rowly.data.entity.ActivityEntity
 import dev.aesir1.rowly.data.entity.CalibrationSampleEntity
+import dev.aesir1.rowly.data.entity.CustomTrainingEntity
 import dev.aesir1.rowly.data.entity.LocationPointEntity
 import dev.aesir1.rowly.data.entity.StrokeRateSampleEntity
 import dev.aesir1.rowly.data.entity.UserSettingsEntity
@@ -19,8 +20,9 @@ import dev.aesir1.rowly.data.entity.UserSettingsEntity
         StrokeRateSampleEntity::class,
         UserSettingsEntity::class,
         CalibrationSampleEntity::class,
+        CustomTrainingEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class RowlyDatabase : RoomDatabase() {
@@ -28,6 +30,7 @@ abstract class RowlyDatabase : RoomDatabase() {
     abstract fun locationPointDao(): LocationPointDao
     abstract fun strokeRateDao(): StrokeRateDao
     abstract fun settingsDao(): SettingsDao
+    abstract fun trainingDao(): TrainingDao
 
     companion object {
         /**
@@ -69,9 +72,23 @@ abstract class RowlyDatabase : RoomDatabase() {
             }
         }
 
+        /** Training support: the custom trainings table plus two activity columns. Additive. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `activities` ADD COLUMN `ergometer` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `activities` ADD COLUMN `trainingName` TEXT")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `custom_trainings` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `description` TEXT NOT NULL, " +
+                        "`phases` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)",
+                )
+            }
+        }
+
         fun create(context: Context): RowlyDatabase =
             Room.databaseBuilder(context, RowlyDatabase::class.java, "rowly.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

@@ -8,6 +8,7 @@ import dev.aesir1.rowly.location.Fix
 import dev.aesir1.rowly.location.TrackAccumulator
 import dev.aesir1.rowly.sensors.Reading
 import dev.aesir1.rowly.sensors.StrokeRateDetector
+import dev.aesir1.rowly.training.TrainingPlan
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,6 +48,19 @@ class RecordingController(
      */
     var strokeSensitivity: Double = UserSettingsEntity.DEFAULT_SENSITIVITY
 
+    /**
+     * Armed by the Training screen before it navigates to Record; consumed by the next [start].
+     * Plain fields rather than nav arguments because the controller is the process-scoped truth
+     * the Record screen already reads.
+     */
+    var armedTraining: TrainingPlan? = null
+    var ergometerMode: Boolean = false
+
+    private var tracker: TrainingTracker? = null
+    private var countdownJob: Job? = null
+    private var ergDistanceM = 0.0
+    private var ergMaxSpeedKmh = 0.0
+
     private val _state = MutableStateFlow(RecordingUiState())
     val state: StateFlow<RecordingUiState> = _state.asStateFlow()
 
@@ -65,6 +79,32 @@ class RecordingController(
     private var spmCount = 0
 
     private var ticker: Job? = null
+
+    /**
+     * The ten seconds between choosing a training and the recording actually starting: time to
+     * put the phone down and take the handle. [onFinished] starts the foreground service - the
+     * controller cannot, it has no Context by design.
+     */
+    fun startCountdown(onFinished: () -> Unit) {
+        if (_state.value.phase != RecordingPhase.Idle || countdownJob != null) return
+        countdownJob = scope.launch {
+            for (second in COUNTDOWN_SECONDS downTo 1) {
+                _state.update { it.copy(countdownSeconds = second) }
+                delay(1000)
+            }
+            countdownJob = null
+            _state.update { it.copy(countdownSeconds = null) }
+            onFinished()
+        }
+    }
+
+    fun cancelCountdown() {
+        countdownJob?.cancel()
+        countdownJob = null
+        armedTraining = null
+        ergometerMode = false
+        _state.update { it.copy(countdownSeconds = null) }
+    }
 
     fun start() {
         val phase = _state.value.phase
@@ -87,16 +127,41 @@ class RecordingController(
         segmentStart = startTime
         activeMs = 0L
         lastReadingAt = startTime
-        _state.value = RecordingUiState(phase = RecordingPhase.Recording)
+        tracker = armedTraining?.let(::TrainingTracker)
+        ergDistanceM = 0.0
+        ergMaxSpeedKmh = 0.0
+        val ergometer = ergometerMode
+        val trainingName = armedTraining?.name
+        _state.value = RecordingUiState(
+            phase = RecordingPhase.Recording,
+            ergometer = ergometer,
+            training = trainingProgress(0L, 0.0),
+        )
 
         scope.launch {
-            val id = withContext(Dispatchers.IO) { repository.startActivity(startTime) }
+            val id = withContext(Dispatchers.IO) {
+                repository.startActivity(startTime, ergometer, trainingName)
+            }
             activityId = id
             // Anything recorded before the row existed is flushed as soon as it does.
             flush()
         }
         startTicker()
     }
+
+    private fun trainingProgress(elapsedMs: Long, distanceM: Double): TrainingProgress? =
+        tracker?.let { t ->
+            TrainingProgress(
+                name = t.plan.name,
+                phaseIndex = t.phaseIndex,
+                totalPhases = t.plan.phases.size,
+                phaseType = t.currentPhase.type,
+                phaseGoalDurationMs = t.currentPhase.durationMs,
+                phaseGoalDistanceM = t.currentPhase.distanceM,
+                phaseProgress = t.progress(elapsedMs, distanceM),
+                complete = t.complete,
+            )
+        }
 
     /** The pause button is being held. Recording carries on until the hold completes. */
     fun onPauseHoldStarted() {
@@ -153,9 +218,15 @@ class RecordingController(
         val id = activityId
         val endTime = clock()
         val duration = activeMs
-        val distanceKm = track.totalDistanceM / 1000.0
+        val distanceKm = (if (ergometerMode) ergDistanceM else track.totalDistanceM) / 1000.0
+        val maxSpeed = if (ergometerMode) ergMaxSpeedKmh else track.maxSpeedKmh
         val averageSpeed = if (duration > 0) distanceKm / (duration / 3_600_000.0) else 0.0
         val averageSpm = if (spmCount > 0) spmSum / spmCount else null
+
+        // The training only steers one session; the next recording starts free unless re-armed.
+        armedTraining = null
+        ergometerMode = false
+        tracker = null
 
         _state.update {
             it.copy(
@@ -176,7 +247,7 @@ class RecordingController(
                         durationMs = duration,
                         distanceKm = distanceKm,
                         averageSpeedKmh = averageSpeed,
-                        maxSpeedKmh = track.maxSpeedKmh,
+                        maxSpeedKmh = maxSpeed,
                         averageSpm = averageSpm,
                     )
                 }
@@ -190,6 +261,8 @@ class RecordingController(
     }
 
     fun onLocation(fix: Fix) {
+        // Belt and braces: the service does not register for location in erg mode either.
+        if (ergometerMode) return
         if (!_state.value.isLive) return
         val point = track.add(fix)
         activityId.let { id ->
@@ -250,10 +323,26 @@ class RecordingController(
                 delay(1000)
                 val now = clock()
                 if (!_state.value.isLive) continue
+                val elapsed = activeMs + (now - segmentStart)
+                if (ergometerMode) {
+                    val spm = (_state.value.strokeRate as? Reading.Valid)?.spm
+                    val speed = spm?.let(::ergSpeedKmh) ?: 0.0
+                    ergDistanceM += speed / 3.6 // one ticker second of travel
+                    if (speed > ergMaxSpeedKmh) ergMaxSpeedKmh = speed
+                }
+                val distanceM = if (ergometerMode) ergDistanceM else track.totalDistanceM
+                tracker?.update(elapsed, distanceM)
                 _state.update { current ->
                     val stale = now - lastReadingAt > SENSOR_WATCHDOG_MS
                     current.copy(
-                        elapsedMs = activeMs + (now - segmentStart),
+                        elapsedMs = elapsed,
+                        distanceKm = if (ergometerMode) ergDistanceM / 1000.0 else current.distanceKm,
+                        speedKmh = if (ergometerMode) {
+                            (current.strokeRate as? Reading.Valid)?.spm?.let(::ergSpeedKmh)
+                        } else {
+                            current.speedKmh
+                        },
+                        training = trainingProgress(elapsed, distanceM),
                         strokeRate = if (stale) {
                             Reading.NoData(Reading.Reason.SENSOR_GAP)
                         } else {
@@ -289,5 +378,13 @@ class RecordingController(
     private companion object {
         const val FLUSH_INTERVAL_SECONDS = 10
         const val SENSOR_WATCHDOG_MS = 3_000L
+        const val COUNTDOWN_SECONDS = 10
     }
 }
+
+/**
+ * Artificial ergometer speed from the stroke rate.
+ * ponytail: a linear SPM map clamped to 5-20 km/h is a placeholder; replace with a real erg
+ * power curve (and calibration) when the feature is developed further.
+ */
+fun ergSpeedKmh(spm: Double): Double = (0.5 * spm).coerceIn(5.0, 20.0)

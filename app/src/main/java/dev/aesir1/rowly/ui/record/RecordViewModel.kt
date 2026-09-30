@@ -37,6 +37,10 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     val state = controller.state
 
+    /** A training was picked on the Training tab and is waiting for this screen to start it. */
+    val trainingArmed: Boolean get() = controller.armedTraining != null
+    val armedTrainingName: String? get() = controller.armedTraining?.name
+
     private val _gate = MutableStateFlow(LocationGate.Ready)
     val gate: StateFlow<LocationGate> = _gate.asStateFlow()
 
@@ -58,11 +62,26 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     /** @return false when the session was refused, with [gate] explaining why. */
     fun start(): Boolean {
+        // An ergometer session needs no location at all, so the gate does not apply.
+        if (controller.ergometerMode) {
+            startArmed()
+            return true
+        }
         refreshGate(permanentlyDenied = _gate.value == LocationGate.PermissionBlocked)
         if (_gate.value != LocationGate.Ready) return false
-        RecordingForegroundService.start(getApplication())
+        if (controller.armedTraining != null) {
+            startArmed()
+        } else {
+            RecordingForegroundService.start(getApplication())
+        }
         return true
     }
+
+    /** A training start gets ten seconds to put the phone down before recording begins. */
+    private fun startArmed() =
+        controller.startCountdown { RecordingForegroundService.start(getApplication()) }
+
+    fun cancelCountdown() = controller.cancelCountdown()
 
     fun pauseHoldStarted() = controller.onPauseHoldStarted()
     fun pauseHoldCancelled() = controller.onPauseHoldCancelled()

@@ -54,6 +54,7 @@ import dev.aesir1.rowly.ui.record.RecordScreen
 import dev.aesir1.rowly.ui.settings.CalibrationScreen
 import dev.aesir1.rowly.ui.settings.SettingsScreen
 import dev.aesir1.rowly.ui.settings.UserScreen
+import dev.aesir1.rowly.ui.training.TrainingEditorScreen
 import dev.aesir1.rowly.ui.training.TrainingScreen
 
 private data class Tab(val route: String, val labelRes: Int, val icon: ImageVector)
@@ -82,6 +83,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val USER = "settings/user"
     const val CALIBRATION = "settings/calibration"
+    const val TRAINING_EDITOR = "training/editor"
     const val ACTIVITY_DETAIL = "activity/{activityId}"
 
     fun activityDetail(id: Long) = "activity/$id"
@@ -100,7 +102,7 @@ fun RowlyApp(navController: NavHostController = rememberNavController()) {
     // never deliberate - it is a mis-tap while rowing - so every route out is closed until the
     // hold-to-confirm completes.
     var calibrating by remember { mutableStateOf(false) }
-    val locked = recording.isLive || calibrating
+    val locked = recording.isLive || recording.countdownSeconds != null || calibrating
     BackHandler(enabled = locked) { }
 
     // Keep the display awake for the duration of a live session - a rower glances at the numbers,
@@ -115,11 +117,15 @@ fun RowlyApp(navController: NavHostController = rememberNavController()) {
 
     val select: (String) -> Unit = { route ->
         navController.navigate(route) {
-            // Keep a single copy of each tab and preserve its state, which is
-            // what makes returning to a live Record screen feel instant.
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            // A tab tap always lands on that tab's root screen. State restoration was tried here
+            // and removed: a finished session pushes its detail page onto the current stack, and
+            // restoring that stack later resurrected a stale detail instead of the live screen -
+            // an armed training then never reached its countdown, and the Activities tab could
+            // reopen an old activity instead of the list. Session state itself lives in the
+            // process-scoped RecordingController, so the Record screen loses nothing.
+            popUpTo(navController.graph.findStartDestination().id) { saveState = false }
             launchSingleTop = true
-            restoreState = true
+            restoreState = false
         }
     }
 
@@ -144,7 +150,15 @@ fun RowlyApp(navController: NavHostController = rememberNavController()) {
                     },
                 )
             }
-            composable(Routes.TRAINING) { TrainingScreen() }
+            composable(Routes.TRAINING) {
+                TrainingScreen(
+                    onCreateCustom = { navController.navigate(Routes.TRAINING_EDITOR) },
+                    onTrainingArmed = { select(Routes.RECORD) },
+                )
+            }
+            composable(Routes.TRAINING_EDITOR) {
+                TrainingEditorScreen(onDone = { navController.popBackStack() })
+            }
             composable(Routes.ACTIVITIES) {
                 ActivitiesScreen(
                     onActivityClick = { id -> navController.navigate(Routes.activityDetail(id)) },
