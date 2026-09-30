@@ -220,7 +220,9 @@ class RecordingController(
         if (!_state.value.isLive) return
         lastReadingAt = clock()
         _state.update { it.copy(strokeRate = reading) }
-        if (reading is Reading.Valid) {
+        // Provisional readings are shown live (marked in the UI) but kept out of the session
+        // statistics: they are early estimates the detector itself does not fully trust.
+        if (reading is Reading.Valid && !reading.provisional) {
             spmSum += reading.spm
             spmCount++
             pendingStrokes += StrokeRateSampleEntity(

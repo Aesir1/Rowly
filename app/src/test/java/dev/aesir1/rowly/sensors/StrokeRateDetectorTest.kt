@@ -47,6 +47,31 @@ class StrokeRateDetectorTest {
         }
     }
 
+    // ---- 1b. Early readings are flagged provisional ----------------------------------------
+
+    @Test
+    fun `readings before the window fills are provisional, later ones are not`() {
+        val readings = run(synth(24.0, 60.0)).valid()
+        assertTrue("expected readings", readings.isNotEmpty())
+        val first = readings.first()
+        assertTrue("first reading should be provisional", first.provisional)
+        // Once 20 s of data is buffered every reading is fully backed.
+        run(synth(24.0, 60.0)).after(25.0).valid().forEach {
+            assertTrue("settled reading still provisional", !it.provisional)
+        }
+    }
+
+    @Test
+    fun `an early provisional reading arrives within about 8 seconds`() {
+        // The point of the shorter support requirement: a rate on screen early, marked as such.
+        // The floor is the hysteresis, not the window: ~4 s of data for 1.5 cycles at 24 SPM,
+        // then two hops of estimate history plus three entry hops before anything is shown.
+        val firstValidAt = run(synth(24.0, 60.0))
+            .firstOrNull { it.second is Reading.Valid }?.first
+        assertNotNull("no reading at all", firstValidAt)
+        assertTrue("first reading only at ${firstValidAt}s", firstValidAt!! <= 8.5)
+    }
+
     // ---- 2. Rate sweep with a realistic waveform ------------------------------------------
 
     @Test

@@ -16,11 +16,20 @@ import kotlin.math.sqrt
 sealed interface Reading {
 
     /**
-     * @param spm        refined estimate, always within the configured valid band
-     * @param displaySpm hysteresis-smoothed integer intended for the UI
-     * @param confidence 0.0..1.0
+     * @param spm         refined estimate, always within the configured valid band
+     * @param displaySpm  hysteresis-smoothed integer intended for the UI
+     * @param confidence  0.0..1.0
+     * @param provisional true while the analysis window is not yet fully backed by data
+     *   (less than [StrokeRateDetector.Config.windowSeconds] of samples). The estimate is
+     *   real but rests on less history than the detector was tuned for, so the UI marks it
+     *   and the session statistics exclude it.
      */
-    data class Valid(val spm: Double, val displaySpm: Int, val confidence: Double) : Reading
+    data class Valid(
+        val spm: Double,
+        val displaySpm: Int,
+        val confidence: Double,
+        val provisional: Boolean = false,
+    ) : Reading
 
     data class NoData(val reason: Reason) : Reading
 
@@ -115,6 +124,15 @@ class StrokeRateDetector(
         val gridHz: Double = 25.0,
         val windowSeconds: Double = 20.0,
         val hopSeconds: Double = 1.0,
+        /**
+         * Cycles of support a period must have inside the buffered data before it may be
+         * reported. 1.5 puts the first reading at roughly 5 s of motion for typical rates
+         * (a 20 SPM stroke is 3 s, times 1.5 = 4.5 s of data), where the tuned-for figure
+         * is the full [windowSeconds]; readings made before the window fills are marked
+         * [Reading.Valid.provisional]. Below ~1.5 the autocorrelation has too little to
+         * repeat against and octave errors return.
+         */
+        val minSupportCycles: Double = 1.5,
         val minSpm: Double = 8.0,
         val maxSpm: Double = 38.0,
         /**
@@ -383,7 +401,12 @@ class StrokeRateDetector(
         if (!wasLocked || abs(candidate - displayValue) >= config.displayDeadbandSpm) {
             displayValue = candidate
         }
-        return Reading.Valid(candidate, displayValue.roundToInt(), candidateConfidence)
+        return Reading.Valid(
+            candidate,
+            displayValue.roundToInt(),
+            candidateConfidence,
+            provisional = filled < windowSize,
+        )
     }
 
     /**
@@ -411,9 +434,12 @@ class StrokeRateDetector(
     private fun analyze(): Boolean {
         val m = filled
 
-        // Require at least 2.5 cycles of support for any period we are willing to report.
-        val lagMaxEff = min(maxLag, (m / 2.5).toInt())
-        if (lagMaxEff < minLag + 2) {
+        // Require at least [Config.minSupportCycles] cycles of support for any period we are
+        // willing to report. Until even the fastest valid rate has that support, the window is
+        // simply too young to say anything - that is warming up, not "no periodicity".
+        val lagMaxEff = min(maxLag, (m / config.minSupportCycles).toInt())
+        val fastestValidLag = (60.0 * config.gridHz / config.maxSpm).toInt()
+        if (lagMaxEff < maxOf(minLag + 2, fastestValidLag)) {
             failReason = Reading.Reason.WARMING_UP
             return false
         }

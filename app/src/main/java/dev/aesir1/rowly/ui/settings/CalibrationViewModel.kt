@@ -160,10 +160,15 @@ class CalibrationViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun onReading(reading: Reading) {
-        if (reading is Reading.Valid) {
+        // Provisional (warm-up) readings are shown live but excluded from the calibration
+        // average - a calibration exists to measure accuracy, not to average in estimates the
+        // detector itself has flagged.
+        if (reading is Reading.Valid && !reading.provisional) {
             spmSum += reading.spm
             spmCount++
             _state.update { it.copy(liveSpm = reading.displaySpm, readingCount = spmCount) }
+        } else if (reading is Reading.Valid) {
+            _state.update { it.copy(liveSpm = reading.displaySpm) }
         } else {
             _state.update { it.copy(liveSpm = null) }
         }

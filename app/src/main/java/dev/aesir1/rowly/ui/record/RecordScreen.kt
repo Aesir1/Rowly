@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -204,7 +205,17 @@ private fun StrokeRateBlock(state: RecordingUiState) {
     )
     when (val reading = state.strokeRate) {
         is Reading.Valid -> {
-            Text(text = reading.displaySpm.toString(), style = RowlyText.Hero)
+            Text(
+                text = reading.displaySpm.toString(),
+                style = RowlyText.Hero,
+                // Red while the detector is still warming up: the number is an early estimate
+                // resting on less data than a settled reading.
+                color = if (reading.provisional) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    Color.Unspecified
+                },
+            )
             Text(
                 text = stringResource(R.string.spm),
                 style = MaterialTheme.typography.titleLarge,
