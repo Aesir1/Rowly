@@ -148,7 +148,6 @@ fun ActivityDetailScreen(
                     SpeedChart(
                         samples = loaded.speedSeries,
                         avgSpeedKmh = loaded.activity.averageSpeedKmh,
-                        maxSpeedKmh = loaded.activity.maxSpeedKmh,
                         onSelect = { sample ->
                             cursor = sample?.let { GeoPoint(it.latitude, it.longitude) }
                         },

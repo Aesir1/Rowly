@@ -46,8 +46,6 @@ fun SpeedChart(
     samples: List<SpeedSample>,
     /** The stored session average, so the reference line agrees with the statistics card. */
     avgSpeedKmh: Double,
-    /** The stored session maximum, same reason. */
-    maxSpeedKmh: Double,
     modifier: Modifier = Modifier,
     onSelect: (SpeedSample?) -> Unit = {},
 ) {
@@ -68,12 +66,12 @@ fun SpeedChart(
     val minDistance = samples.first().distanceKm
     val maxDistance = samples.last().distanceKm
     val distanceSpan = (maxDistance - minDistance).takeIf { it > 1e-9 } ?: 1.0
-    // The stored max can sit a hair above the trace's own peak (downsampling averages buckets),
-    // so the scale is sized to whichever is higher.
-    val maxSpeed = maxOf(samples.maxOf { it.speedKmh }, maxSpeedKmh)
+    // The trace's own peak, so the max reference line sits exactly on the drawn curve. The stored
+    // session max can be a hair higher (downsampling averages buckets) and would float above it.
+    val maxSpeed = samples.maxOf { it.speedKmh }
     val minSpeed = samples.minOf { it.speedKmh }
     val avgLabel = referenceLabel(stringResource(R.string.avg_speed), avgSpeedKmh)
-    val maxLabel = referenceLabel(stringResource(R.string.max_speed), maxSpeedKmh)
+    val maxLabel = referenceLabel(stringResource(R.string.max_speed), maxSpeed)
     // A little headroom either side so the trace never touches the frame.
     val top = maxSpeed + (maxSpeed - minSpeed).coerceAtLeast(1.0) * 0.1
     val bottom = (minSpeed - (maxSpeed - minSpeed).coerceAtLeast(1.0) * 0.1).coerceAtLeast(0.0)
@@ -90,7 +88,7 @@ fun SpeedChart(
                     readout.speedKmh,
                 )
             } else {
-                String.format(Locale.getDefault(), "%.1f - %.1f km/h", minSpeed, maxSpeedKmh)
+                String.format(Locale.getDefault(), "%.1f - %.1f km/h", minSpeed, maxSpeed)
             },
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -182,7 +180,7 @@ fun SpeedChart(
             )
             drawPath(path, color = line, style = Stroke(width = 2.dp.toPx()))
             reference(avgSpeedKmh, avgLabel, labelBelow = true)
-            reference(maxSpeedKmh, maxLabel, labelBelow = false)
+            reference(maxSpeed, maxLabel, labelBelow = false)
             drawLine(
                 color = axis.copy(alpha = 0.4f),
                 start = Offset(0f, plotBottom),
@@ -201,12 +199,6 @@ fun SpeedChart(
                 drawCircle(color = crosshair, radius = 4.dp.toPx(), center = Offset(x, yOf(index)))
             }
 
-            drawText(
-                measurer,
-                String.format(Locale.getDefault(), "%.1f km/h", top),
-                topLeft = Offset(0f, 0f),
-                style = labelStyle,
-            )
             val endLabel = String.format(Locale.getDefault(), "%.2f km", maxDistance)
             val endSize = measurer.measure(endLabel, labelStyle).size
             drawText(
