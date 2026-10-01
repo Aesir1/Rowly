@@ -13,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -24,6 +26,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,11 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.aesir1.rowly.ProjectLinks
 import dev.aesir1.rowly.R
 import dev.aesir1.rowly.RowlyApplication
 import dev.aesir1.rowly.data.entity.UnitSystem
@@ -69,9 +74,47 @@ fun SettingsScreen(onOpenCalibration: () -> Unit) {
             subtitle = stringResource(R.string.settings_calibration_body),
             onClick = onOpenCalibration,
         )
+        AboutDeveloperCard()
     }
 }
 
+@Composable
+private fun AboutDeveloperCard() {
+    val uriHandler = LocalUriHandler.current
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Favorite,
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 16.dp),
+                )
+                Text(
+                    stringResource(R.string.settings_about_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            Text(
+                text = stringResource(R.string.settings_about_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            TextButton(onClick = { uriHandler.openUri(ProjectLinks.GITHUB) }) {
+                Icon(Icons.Filled.Code, contentDescription = null, Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.settings_about_github))
+            }
+            TextButton(onClick = { uriHandler.openUri(ProjectLinks.PAYPAL) }) {
+                Icon(Icons.Filled.Favorite, contentDescription = null, Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.settings_about_donate))
+            }
+        }
+    }
+}
 @Composable
 private fun SettingsRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
     Card(

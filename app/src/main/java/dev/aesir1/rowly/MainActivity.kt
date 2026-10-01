@@ -15,6 +15,9 @@ import dev.aesir1.rowly.ui.navigation.RowlyApp
 import dev.aesir1.rowly.ui.splash.SPLASH_MILLIS
 import dev.aesir1.rowly.ui.splash.SplashScreen
 import dev.aesir1.rowly.ui.theme.RowlyTheme
+import dev.aesir1.rowly.ui.welcome.WelcomeScreen
+import dev.aesir1.rowly.ui.welcome.markWelcomeShown
+import dev.aesir1.rowly.ui.welcome.welcomeDue
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -26,6 +29,9 @@ class MainActivity : ComponentActivity() {
                 // Saveable, so rotating the phone does not replay the launch image - and so a
                 // rotation mid-session never tears down the Record screen to show a splash.
                 var splashDone by rememberSaveable { mutableStateOf(false) }
+                // Checked once per activity creation and saved across rotation, so the page
+                // neither re-appears mid-session nor replays after a rotation dismissed it.
+                var showWelcome by rememberSaveable { mutableStateOf(welcomeDue(this)) }
                 LaunchedEffect(Unit) {
                     if (!splashDone) {
                         // Start counting from the frame the splash is actually drawn on, not from
@@ -37,7 +43,17 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 Crossfade(targetState = splashDone, label = "splash") { done ->
-                    if (done) RowlyApp() else SplashScreen()
+                    when {
+                        !done -> SplashScreen()
+                        showWelcome -> WelcomeScreen(
+                            onContinue = {
+                                markWelcomeShown(this)
+                                showWelcome = false
+                            },
+                        )
+
+                        else -> RowlyApp()
+                    }
                 }
             }
         }

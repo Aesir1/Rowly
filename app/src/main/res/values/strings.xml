@@ -121,6 +121,14 @@
     <string name="units_imperial">Imperial (mi)</string>
     <string name="settings_calibration">Calibration</string>
     <string name="settings_calibration_body">Check the phone\'s stroke rate against an ergometer</string>
+    <string name="settings_about_title">About the developer</string>
+    <string name="settings_about_body">I enjoy creating handy solutions to everyday problems and filling the gaps where existing tools fall short. Turning an idea into something useful is what drives me.\n\nRowly is free and open source — no ads, no subscriptions, no tracking. If it is useful to you, your support helps me keep building and sharing practical solutions.</string>
+    <string name="settings_about_github">Source code on GitHub</string>
+    <string name="settings_about_donate">Support via PayPal</string>
+    <string name="welcome_title">Welcome to Rowly</string>
+    <string name="welcome_body">Rowing electronics like a CoxBox cost more than many rowers and clubs can afford. Rowly turns the phone you already own into a rowing computer — stroke rate, speed and guided trainings, free and open source.</string>
+    <string name="welcome_support">Support the project</string>
+    <string name="welcome_continue">Get started</string>
 
     <string name="calibration_intro">Put the phone where you row with it, set the ergometer going, and run one minute. Then type in the rate the ergometer showed.</string>
     <string name="calibration_start">Start 1-minute test</string>
