@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
@@ -24,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNotNull
@@ -53,6 +56,7 @@ class RecordingForegroundService : Service() {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var pendingSpeech: String? = null
+    private var speechJob: Job? = null
 
     /**
      * The state flow replays its current value the moment it is collected, and at that point the
@@ -153,7 +157,22 @@ class RecordingForegroundService : Service() {
             return
         }
         pendingSpeech = null
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "rowly-training")
+        // Bluetooth speakers wake from idle too slowly and clip the first words. Two half-second
+        // beeps (half a second apart) open the audio channel, then the voice follows half a second
+        // after the second beep.
+        speechJob?.cancel()
+        speechJob = scope.launch {
+            val beeper = ToneGenerator(AudioManager.STREAM_MUSIC, BEEP_VOLUME)
+            try {
+                repeat(2) {
+                    beeper.startTone(ToneGenerator.TONE_SUP_DIAL, BEEP_MS)
+                    delay((BEEP_MS + BEEP_GAP_MS).toLong())
+                }
+            } finally {
+                beeper.release()
+            }
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "rowly-training")
+        }
     }
 
     private fun applyPhase(state: RecordingUiState) {
@@ -252,6 +271,11 @@ class RecordingForegroundService : Service() {
         private const val CHANNEL_ID = "rowly_recording"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_START = "dev.aesir1.rowly.START_RECORDING"
+
+        // ponytail: fixed wake-up beep timing; make configurable if other speakers need more lead time.
+        private const val BEEP_MS = 500
+        private const val BEEP_GAP_MS = 500
+        private const val BEEP_VOLUME = 80 // 0..100, relative to STREAM_MUSIC
 
         fun start(context: Context) {
             context.startForegroundService(
