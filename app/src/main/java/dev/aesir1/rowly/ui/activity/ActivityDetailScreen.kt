@@ -40,6 +40,7 @@ import dev.aesir1.rowly.R
 import dev.aesir1.rowly.RowlyApplication
 import dev.aesir1.rowly.data.entity.ActivityEntity
 import dev.aesir1.rowly.data.entity.LocationPointEntity
+import dev.aesir1.rowly.data.entity.StrokeRateSampleEntity
 import dev.aesir1.rowly.recording.formatElapsed
 import dev.aesir1.rowly.ui.activities.formatDate
 import dev.aesir1.rowly.ui.activities.formatTime
@@ -56,6 +57,7 @@ data class ActivityDetail(
     val activity: ActivityEntity,
     val points: List<LocationPointEntity>,
     val speedSeries: List<SpeedSample>,
+    val strokeSamples: List<StrokeRateSampleEntity>,
 )
 
 class ActivityDetailViewModel(application: Application) : AndroidViewModel(application) {
@@ -73,9 +75,12 @@ class ActivityDetailViewModel(application: Application) : AndroidViewModel(appli
             // Points never change once a session is finished, so they are read once; the activity
             // row is observed because its summary is written asynchronously right after Finish.
             val points = withContext(Dispatchers.IO) { repository.locationPoints(activityId) }
+            val strokes = withContext(Dispatchers.IO) { repository.strokeSamples(activityId) }
             val series = withContext(Dispatchers.Default) { SpeedSeries.build(points) }
             repository.observeActivity(activityId).collect { activity ->
-                if (activity != null) _detail.value = ActivityDetail(activity, points, series)
+                if (activity != null) {
+                    _detail.value = ActivityDetail(activity, points, series, strokes)
+                }
             }
         }
     }
@@ -148,6 +153,7 @@ fun ActivityDetailScreen(
                     SpeedChart(
                         samples = loaded.speedSeries,
                         avgSpeedKmh = loaded.activity.averageSpeedKmh,
+                        strokeSamples = loaded.strokeSamples,
                         onSelect = { sample ->
                             cursor = sample?.let { GeoPoint(it.latitude, it.longitude) }
                         },

@@ -23,7 +23,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import androidx.compose.ui.unit.sp
 import dev.aesir1.rowly.R
+import dev.aesir1.rowly.data.entity.StrokeRateSampleEntity
 import java.util.Locale
 
 /**
@@ -47,6 +50,8 @@ fun SpeedChart(
     /** The stored session average, so the reference line agrees with the statistics card. */
     avgSpeedKmh: Double,
     modifier: Modifier = Modifier,
+    /** The session's stroke readings, so a range selection can report its average SPM. */
+    strokeSamples: List<StrokeRateSampleEntity> = emptyList(),
     onSelect: (SpeedSample?) -> Unit = {},
 ) {
     if (samples.size < 2) return
@@ -62,6 +67,10 @@ fun SpeedChart(
 
     var selected by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(selected) { onSelect(selected?.let { samples[it] }) }
+    // Range selection, as sample indices with first <= second. Created by a two-second hold,
+    // adjusted by dragging either handle, dismissed by a plain tap.
+    var selection by remember(samples) { mutableStateOf<Pair<Int, Int>?>(null) }
+    val haptics = LocalHapticFeedback.current
 
     val minDistance = samples.first().distanceKm
     val maxDistance = samples.last().distanceKm
@@ -79,8 +88,11 @@ fun SpeedChart(
 
     Column(modifier) {
         val readout = selected?.let { samples[it] }
+        val range = selection
         Text(
-            text = if (readout != null) {
+            text = if (range != null) {
+                rangeReadout(samples, range, strokeSamples, stringResource(R.string.spm))
+            } else if (readout != null) {
                 String.format(
                     Locale.getDefault(),
                     "%.2f km  -  %.1f km/h",
@@ -99,27 +111,92 @@ fun SpeedChart(
                 .fillMaxWidth()
                 .height(180.dp)
                 .pointerInput(samples) {
-                    // One gesture loop for both the tap and the drag. Two detectors in two
-                    // pointerInput nodes cannot share this: detectTapGestures consumes the down,
-                    // and the drag detector then cancels itself at the touch slop, which froze
-                    // the crosshair wherever the finger first landed.
+                    // One gesture loop for everything. Two detectors in two pointerInput nodes
+                    // cannot share this: detectTapGestures consumes the down, and the drag
+                    // detector then cancels itself at the touch slop, which froze the crosshair
+                    // wherever the finger first landed.
                     //
-                    // The crosshair stays put after the finger lifts: the point of dragging is to
-                    // read a value off the chart, and clearing it on release hides the answer.
+                    // The crosshair and the selection both stay put after the finger lifts: the
+                    // point of either is to read values off the chart, and clearing them on
+                    // release hides the answer.
                     awaitEachGesture {
                         val down = awaitFirstDown()
-                        selected = nearestIndex(down.position.x, size.width, samples)
                         down.consume()
-                        do {
-                            val event = awaitPointerEvent()
-                            event.changes.forEach { change ->
-                                if (change.pressed) {
-                                    selected =
-                                        nearestIndex(change.position.x, size.width, samples)
-                                    change.consume()
-                                }
+                        fun indexAt(x: Float) = nearestIndex(x, size.width, samples)
+                        fun xOfIndex(i: Int) =
+                            ((samples[i].distanceKm - minDistance) / distanceSpan)
+                                .toFloat() * size.width
+
+                        // A down landing on a selection handle drags that handle; the other
+                        // bound anchors, so dragging across it swaps them instead of jamming.
+                        var anchor: Int? = selection?.let { (s, e) ->
+                            val grab = 24.dp.toPx()
+                            val toStart = abs(down.position.x - xOfIndex(s))
+                            val toEnd = abs(down.position.x - xOfIndex(e))
+                            when {
+                                minOf(toStart, toEnd) > grab -> null
+                                toStart <= toEnd -> e
+                                else -> s
                             }
-                        } while (event.changes.any { it.pressed })
+                        }
+
+                        if (anchor == null) {
+                            selected = indexAt(down.position.x)
+                            // Three ways out of the hold: a two-second press starts a range
+                            // selection (timeout -> null), movement past the slop scrubs the
+                            // crosshair (false), and a plain lift is a tap (true).
+                            val lifted = withTimeoutOrNull(2_000L) {
+                                var result = true
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.first()
+                                    change.consume()
+                                    if (!change.pressed) break
+                                    if ((change.position - down.position).getDistance() >
+                                        viewConfiguration.touchSlop
+                                    ) {
+                                        result = false
+                                        break
+                                    }
+                                }
+                                result
+                            }
+                            when (lifted) {
+                                null -> {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    selected = null
+                                    val start = indexAt(down.position.x)
+                                    selection = start to start
+                                    anchor = start
+                                }
+                                // Scrubbing leaves selection mode: one highlighted range with a
+                                // crosshair wandering through it reads as two answers at once.
+                                false -> do {
+                                    selection = null
+                                    val event = awaitPointerEvent()
+                                    event.changes.forEach { change ->
+                                        if (change.pressed) {
+                                            selected = indexAt(change.position.x)
+                                            change.consume()
+                                        }
+                                    }
+                                } while (event.changes.any { it.pressed })
+                                true -> selection = null
+                            }
+                        }
+
+                        anchor?.let { fixed ->
+                            do {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { change ->
+                                    if (change.pressed) {
+                                        val idx = indexAt(change.position.x)
+                                        selection = minOf(fixed, idx) to maxOf(fixed, idx)
+                                        change.consume()
+                                    }
+                                }
+                            } while (event.changes.any { it.pressed })
+                        }
                     }
                 },
         ) {
@@ -199,6 +276,37 @@ fun SpeedChart(
                 drawCircle(color = crosshair, radius = 4.dp.toPx(), center = Offset(x, yOf(index)))
             }
 
+            selection?.let { (startIdx, endIdx) ->
+                val x0 = xOf(startIdx)
+                val x1 = xOf(endIdx)
+                // Low alpha wash: the trace and the reference labels stay readable through it.
+                drawRect(
+                    color = crosshair.copy(alpha = 0.15f),
+                    topLeft = Offset(x0, 0f),
+                    size = Size(x1 - x0, plotBottom),
+                )
+                for (x in listOf(x0, x1)) {
+                    drawLine(
+                        color = crosshair,
+                        start = Offset(x, 0f),
+                        end = Offset(x, plotBottom),
+                        strokeWidth = 2.dp.toPx(),
+                    )
+                    // The grip, sized to say "drag me" rather than to match the crosshair dot.
+                    drawCircle(
+                        color = labelBackground,
+                        radius = 7.dp.toPx(),
+                        center = Offset(x, plotBottom / 2),
+                    )
+                    drawCircle(
+                        color = crosshair,
+                        radius = 7.dp.toPx(),
+                        center = Offset(x, plotBottom / 2),
+                        style = Stroke(width = 2.dp.toPx()),
+                    )
+                }
+            }
+
             val endLabel = String.format(Locale.getDefault(), "%.2f km", maxDistance)
             val endSize = measurer.measure(endLabel, labelStyle).size
             drawText(
@@ -215,6 +323,42 @@ fun SpeedChart(
             )
         }
     }
+}
+
+/**
+ * Readout for a selected range: distance span, its true average speed (distance over elapsed
+ * time, not a mean of the smoothed trace), and the average SPM of the stroke readings that
+ * fall inside the range's time window.
+ */
+private fun rangeReadout(
+    samples: List<SpeedSample>,
+    range: Pair<Int, Int>,
+    strokeSamples: List<StrokeRateSampleEntity>,
+    spmUnit: String,
+): String {
+    val a = samples[range.first]
+    val b = samples[range.second]
+    val hours = (b.timestamp - a.timestamp) / 3_600_000.0
+    val avgSpeed = if (hours > 0) {
+        (b.distanceKm - a.distanceKm) / hours
+    } else {
+        a.speedKmh
+    }
+    val inRange = strokeSamples.filter { it.timestamp in a.timestamp..b.timestamp }
+    val spm = if (inRange.isEmpty()) {
+        "--"
+    } else {
+        String.format(Locale.getDefault(), "%.0f", inRange.sumOf { it.strokesPerMinute } / inRange.size)
+    }
+    return String.format(
+        Locale.getDefault(),
+        "%.2f - %.2f km  -  %.1f km/h  -  %s %s",
+        a.distanceKm,
+        b.distanceKm,
+        avgSpeed,
+        spm,
+        spmUnit,
+    )
 }
 
 private fun referenceLabel(name: String, speed: Double): String =

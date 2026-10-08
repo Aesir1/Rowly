@@ -3,12 +3,14 @@ package dev.aesir1.rowly.ui.activity
 import dev.aesir1.rowly.data.entity.LocationPointEntity
 import dev.aesir1.rowly.location.TrackAccumulator
 
-/** One point on the speed-over-distance chart, with the position it was measured at. */
+/** One point on the speed-over-distance chart, with the position and time it was measured at. */
 data class SpeedSample(
     val distanceKm: Double,
     val speedKmh: Double,
     val latitude: Double,
     val longitude: Double,
+    /** Epoch millis, so a chart selection can be mapped onto the stroke-rate samples. */
+    val timestamp: Long,
 )
 
 /**
@@ -56,6 +58,7 @@ object SpeedSeries {
                 speedKmh = window.average(),
                 latitude = point.latitude,
                 longitude = point.longitude,
+                timestamp = point.timestamp,
             )
         }
         return downsample(raw, maxPoints)
@@ -72,11 +75,13 @@ object SpeedSeries {
             var speed = 0.0
             var latitude = 0.0
             var longitude = 0.0
+            var timestamp = 0L
             for (i in from until to) {
                 distance += samples[i].distanceKm
                 speed += samples[i].speedKmh
                 latitude += samples[i].latitude
                 longitude += samples[i].longitude
+                timestamp += samples[i].timestamp
             }
             val count = (to - from).toDouble()
             // The position is averaged like the rest: a bucket is a few seconds of rowing, so its
@@ -86,6 +91,7 @@ object SpeedSeries {
                 speedKmh = speed / count,
                 latitude = latitude / count,
                 longitude = longitude / count,
+                timestamp = timestamp / (to - from),
             )
         }
         return out

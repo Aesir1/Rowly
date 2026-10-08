@@ -136,6 +136,20 @@ class SpeedSeriesTest {
     }
 
     @Test
+    fun `the timestamp travels with the sample through downsampling`() {
+        // Range selection maps chart samples onto stroke-rate samples by time, so a bucket must
+        // keep the time of the stretch it summarises.
+        val points = (0 until 1000).map { point(it, it * 4.0, speedMs = 3f) }
+        val series = SpeedSeries.build(points, maxPoints = 100)
+        assertEquals(100, series.size)
+        // First bucket covers indices 0..9: mean of 1_000_000 + (0..9) * 1000.
+        assertEquals(1_004_500L, series.first().timestamp)
+        series.zipWithNext().forEach { (a, b) ->
+            assertTrue("time went backwards", b.timestamp > a.timestamp)
+        }
+    }
+
+    @Test
     fun `a short session is left alone`() {
         val points = (0 until 50).map { point(it, it * 4.0, speedMs = 3f) }
         assertEquals(50, SpeedSeries.build(points, maxPoints = 400).size)
