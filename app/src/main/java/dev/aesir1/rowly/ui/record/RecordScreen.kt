@@ -3,6 +3,7 @@ package dev.aesir1.rowly.ui.record
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,10 +41,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -159,51 +163,150 @@ fun RecordScreen(
             Spacer(Modifier.height(16.dp))
         }
 
-        StrokeRateBlock(state, secondaryText)
-        Spacer(Modifier.height(24.dp))
-        Metric(stringResource(R.string.time), formatElapsed(state.elapsedMs), null, secondaryText)
-        Spacer(Modifier.height(16.dp))
-        Metric(
-            stringResource(R.string.distance),
-            String.format(Locale.getDefault(), "%.2f", state.distanceKm),
-            stringResource(R.string.unit_km),
-            secondaryText,
-        )
-        Spacer(Modifier.height(16.dp))
-        Metric(
-            stringResource(R.string.speed),
-            state.speedKmh?.let { String.format(Locale.getDefault(), "%.1f", it) } ?: "--",
-            stringResource(R.string.unit_kmh),
-            secondaryText,
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        when (state.phase) {
-            RecordingPhase.Idle, RecordingPhase.Finished -> {
-                if (showGate && gate != LocationGate.Ready) {
-                    LocationGateCard(
-                        gate = gate,
-                        onGrant = {
-                            permissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                ),
-                            )
-                        },
-                        onOpenAppSettings = {
-                            context.startActivity(
-                                Intent(
-                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    Uri.fromParts("package", context.packageName, null),
-                                ),
-                            )
-                        },
-                        onOpenLocationSettings = {
-                            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                        },
+        val landscape =
+            LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val gateVisible = showGate && gate != LocationGate.Ready &&
+            (state.phase == RecordingPhase.Idle || state.phase == RecordingPhase.Finished)
+        val gateCard: @Composable () -> Unit = {
+            LocationGateCard(
+                gate = gate,
+                onGrant = {
+                    permissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                        ),
                     )
+                },
+                onOpenAppSettings = {
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", context.packageName, null),
+                        ),
+                    )
+                },
+                onOpenLocationSettings = {
+                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                },
+            )
+        }
+        if (landscape) {
+            // Same readings in the same order, laid left to right: the phone mounted sideways
+            // still reads stroke rate first, then time, distance, speed.
+            // The full metric size wraps inside a fifth of a landscape screen, so the numbers
+            // step down a size; time gets the widest cell because 00:00:00 is the longest value.
+            val compactMetric = RowlyText.Metric.copy(fontSize = 36.sp, lineHeight = 40.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) { StrokeRateBlock(state, secondaryText) }
+                Box(Modifier.weight(1.4f), contentAlignment = Alignment.Center) {
+                    Metric(
+                        stringResource(R.string.time),
+                        formatElapsed(state.elapsedMs),
+                        null,
+                        secondaryText,
+                        valueStyle = compactMetric,
+                    )
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Metric(
+                        stringResource(R.string.distance),
+                        String.format(Locale.getDefault(), "%.2f", state.distanceKm),
+                        stringResource(R.string.unit_km),
+                        secondaryText,
+                        valueStyle = compactMetric,
+                    )
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Metric(
+                        stringResource(R.string.speed),
+                        state.speedKmh?.let { String.format(Locale.getDefault(), "%.1f", it) }
+                            ?: "--",
+                        stringResource(R.string.unit_kmh),
+                        secondaryText,
+                        valueStyle = compactMetric,
+                    )
+                }
+                // The control is the last thing read in portrait, so it sits last here too.
+                // Inside the row it shares the metrics' height instead of falling off the
+                // bottom of a short landscape screen.
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    when (state.phase) {
+                        RecordingPhase.Idle, RecordingPhase.Finished -> Button(
+                            onClick = { if (!viewModel.start()) showGate = true },
+                            modifier = Modifier.fillMaxWidth().height(64.dp),
+                        ) {
+                            Text(
+                                stringResource(R.string.start),
+                                style = MaterialTheme.typography.headlineSmall,
+                            )
+                        }
+
+                        RecordingPhase.Recording, RecordingPhase.PauseConfirmation -> HoldButton(
+                            onHoldStart = viewModel::pauseHoldStarted,
+                            onHoldCancel = viewModel::pauseHoldCancelled,
+                            onHoldComplete = viewModel::pause,
+                        )
+
+                        RecordingPhase.Paused -> {
+                            Text(
+                                text = stringResource(R.string.paused),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = viewModel::resume,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                            ) { Text(stringResource(R.string.continue_recording)) }
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = viewModel::finish,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                            ) { Text(stringResource(R.string.finish)) }
+                        }
+                    }
+                }
+            }
+            if (gateVisible) {
+                Spacer(Modifier.height(16.dp))
+                gateCard()
+            }
+            Spacer(Modifier.height(16.dp))
+        } else {
+            StrokeRateBlock(state, secondaryText)
+            Spacer(Modifier.height(24.dp))
+            Metric(stringResource(R.string.time), formatElapsed(state.elapsedMs), null, secondaryText)
+            Spacer(Modifier.height(16.dp))
+            Metric(
+                stringResource(R.string.distance),
+                String.format(Locale.getDefault(), "%.2f", state.distanceKm),
+                stringResource(R.string.unit_km),
+                secondaryText,
+            )
+            Spacer(Modifier.height(16.dp))
+            Metric(
+                stringResource(R.string.speed),
+                state.speedKmh?.let { String.format(Locale.getDefault(), "%.1f", it) } ?: "--",
+                stringResource(R.string.unit_kmh),
+                secondaryText,
+            )
+
+            Spacer(Modifier.height(32.dp))
+        }
+
+        if (!landscape) when (state.phase) {
+            RecordingPhase.Idle, RecordingPhase.Finished -> {
+                if (gateVisible) {
+                    gateCard()
                     Spacer(Modifier.height(16.dp))
                 }
                 Button(
@@ -352,7 +455,13 @@ private fun StrokeRateBlock(state: RecordingUiState, secondary: Color) {
 }
 
 @Composable
-private fun Metric(label: String, value: String, unit: String?, secondary: Color) {
+private fun Metric(
+    label: String,
+    value: String,
+    unit: String?,
+    secondary: Color,
+    valueStyle: TextStyle = RowlyText.Metric,
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = label,
@@ -360,7 +469,7 @@ private fun Metric(label: String, value: String, unit: String?, secondary: Color
             color = secondary,
         )
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(text = value, style = RowlyText.Metric)
+            Text(text = value, style = valueStyle)
             if (unit != null) {
                 Spacer(Modifier.width(6.dp))
                 Text(
